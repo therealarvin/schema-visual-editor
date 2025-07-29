@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,6 +46,7 @@ interface FieldEditorProps {
   canMoveUp: boolean;
   canMoveDown: boolean;
   schema: Schema; // Need this to lookup linked fields
+  onReorder: (itemId: string, newOrder: number) => void;
 }
 
 const inputTypes = [
@@ -127,13 +128,20 @@ const validationRuleOperators = [
 ];
 
 //eslint-disable-next-line @typescript-eslint/no-unused-vars
-function FieldEditor({ item, onUpdate, onDelete, onDuplicate, index, onMove, onMoveUp, onMoveDown, canMoveUp, canMoveDown, schema }: FieldEditorProps) {
+function FieldEditor({ item, onUpdate, onDelete, onDuplicate, index, onMove, onMoveUp, onMoveDown, canMoveUp, canMoveDown, schema, onReorder }: FieldEditorProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempDisplayName, setTempDisplayName] = useState(item.display_attributes.display_name || '');
+  const [isEditingOrder, setIsEditingOrder] = useState(false);
+  const [tempOrder, setTempOrder] = useState(item.display_attributes.order.toString());
   const [radioOptions, setRadioOptions] = useState(
     item.display_attributes.display_radio_options?.join('\n') || ''
   );
+
+  // Sync tempOrder when item order changes externally
+  useEffect(() => {
+    setTempOrder(item.display_attributes.order.toString());
+  }, [item.display_attributes.order]);
 //eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateField = useCallback((path: string, value: any) => {
     const keys = path.split('.');
@@ -431,7 +439,42 @@ function FieldEditor({ item, onUpdate, onDelete, onDuplicate, index, onMove, onM
                 <Badge variant="outline" className="text-xs flex-shrink-0">
                   {item.display_attributes.input_type}
                 </Badge>
-                <span className="text-xs text-gray-500 flex-shrink-0">Order: {item.display_attributes.order}</span>
+                {isEditingOrder ? (
+                  <Input
+                    type="number"
+                    value={tempOrder}
+                    onChange={(e) => setTempOrder(e.target.value)}
+                    onBlur={() => {
+                      const newOrder = parseInt(tempOrder) || 1;
+                      onReorder(item.unique_id, newOrder);
+                      setIsEditingOrder(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const newOrder = parseInt(tempOrder) || 1;
+                        onReorder(item.unique_id, newOrder);
+                        setIsEditingOrder(false);
+                      } else if (e.key === 'Escape') {
+                        setTempOrder(item.display_attributes.order.toString());
+                        setIsEditingOrder(false);
+                      }
+                    }}
+                    className="h-6 w-16 text-xs font-mono px-2"
+                    min="1"
+                    autoFocus
+                  />
+                ) : (
+                  <Badge 
+                    variant="secondary" 
+                    className="text-xs flex-shrink-0 font-mono cursor-pointer hover:bg-gray-300 transition-colors"
+                    onClick={() => {
+                      setTempOrder(item.display_attributes.order.toString());
+                      setIsEditingOrder(true);
+                    }}
+                  >
+                    #{item.display_attributes.order}
+                  </Badge>
+                )}
                 {item.display_attributes.block && (
                   <Badge variant="secondary" className="text-xs max-w-[150px] truncate" title={`Block: ${item.display_attributes.block}`}>
                     Block: {item.display_attributes.block}
@@ -1010,7 +1053,10 @@ function FieldEditor({ item, onUpdate, onDelete, onDuplicate, index, onMove, onM
                     id={`${item.unique_id}-order`}
                     type="number"
                     value={item.display_attributes.order || 1}
-                    onChange={e => updateField('display_attributes.order', parseInt(e.target.value) || 1)}
+                    onChange={e => {
+                      const newOrder = parseInt(e.target.value) || 1;
+                      onReorder(item.unique_id, newOrder);
+                    }}
                     min={1}
                   />
                 </div>
@@ -1582,6 +1628,38 @@ export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorPro
     }
   }, [moveField, schema.length]);
 
+  const reorderField = useCallback((itemId: string, newOrder: number) => {
+    const currentItem = schema.find(item => item.unique_id === itemId);
+    if (!currentItem) return;
+
+    const newSchema = [...schema];
+    const maxOrder = Math.max(...newSchema.map(s => s.display_attributes.order));
+    const clampedOrder = Math.max(1, Math.min(newOrder, maxOrder));
+    
+    // If the new order is the same, do nothing
+    if (currentItem.display_attributes.order === clampedOrder) return;
+
+    // Get all items sorted by current order
+    const sortedItems = [...newSchema].sort((a, b) => a.display_attributes.order - b.display_attributes.order);
+    
+    // Remove the item from its current position
+    const currentIndex = sortedItems.findIndex(item => item.unique_id === itemId);
+    const [movedItem] = sortedItems.splice(currentIndex, 1);
+    
+    // Insert at the new position (adjust for 0-based index)
+    sortedItems.splice(clampedOrder - 1, 0, movedItem);
+    
+    // Update all order numbers
+    sortedItems.forEach((item, index) => {
+      const originalItem = newSchema.find(s => s.unique_id === item.unique_id);
+      if (originalItem) {
+        originalItem.display_attributes.order = index + 1;
+      }
+    });
+    
+    onSchemaChange(newSchema);
+  }, [schema, onSchemaChange]);
+
   return (
     <div className="space-y-4 h-full">
       <div className="flex items-center justify-between px-1">
@@ -1615,6 +1693,7 @@ export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorPro
                   canMoveUp={index > 0}
                   canMoveDown={index < sortedSchema.length - 1}
                   schema={schema}
+                  onReorder={reorderField}
                 />
               );
             })
