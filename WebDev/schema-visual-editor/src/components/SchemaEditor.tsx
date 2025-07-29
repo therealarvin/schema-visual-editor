@@ -1713,7 +1713,9 @@ export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorPro
       }
     };
     
-    onSchemaChange([...newSchema, newField]);
+    // Sort the schema by order to maintain proper JSON structure
+    const finalSchema = [...newSchema, newField].sort((a, b) => a.display_attributes.order - b.display_attributes.order);
+    onSchemaChange(finalSchema);
   }, [schema, onSchemaChange]);
 
   const updateField = useCallback((index: number, updatedItem: SchemaItem) => {
