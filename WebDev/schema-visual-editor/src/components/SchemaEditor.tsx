@@ -1460,76 +1460,203 @@ function FieldEditor({ item, onUpdate, onDelete, onDuplicate, index, onMove, onM
                   {/* Linked Text Fields */}
                   <div>
                     <Label>Linked Text Fields (continuation boxes)</Label>
-                    <Input
-                      value={pdf.linked_form_fields_text?.join(', ') || ''}
-                      onChange={e => {
-                        const fields = e.target.value.split(',').map(f => f.trim()).filter(f => f);
-                        updatePdfAttribute(index, 'linked_form_fields_text', fields.length > 0 ? fields : undefined);
-                      }}
-                      placeholder="field_cont1, field_cont2"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Comma-separated list of continuation fields (left-to-right)
-                    </p>
+                    <div className="space-y-2">
+                      {(pdf.linked_form_fields_text || []).map((field, fieldIndex) => (
+                        <Card key={fieldIndex} className="p-3">
+                          <div className="flex gap-2 items-center">
+                            <Input
+                              value={field}
+                              onChange={e => {
+                                const newFields = [...(pdf.linked_form_fields_text || [])];
+                                newFields[fieldIndex] = e.target.value;
+                                updatePdfAttribute(index, 'linked_form_fields_text', newFields);
+                              }}
+                              placeholder="Continuation field name"
+                              className="flex-1"
+                            />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const newFields = (pdf.linked_form_fields_text || []).filter((_, i) => i !== fieldIndex);
+                                updatePdfAttribute(index, 'linked_form_fields_text', newFields.length > 0 ? newFields : undefined);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </Card>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const newFields = [...(pdf.linked_form_fields_text || []), ''];
+                          updatePdfAttribute(index, 'linked_form_fields_text', newFields);
+                        }}
+                        className="w-full"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Text Field
+                      </Button>
+                    </div>
                   </div>
 
                   {/* Linked Radio Fields */}
                   <div>
                     <Label>Linked Radio Fields</Label>
-                    <Textarea
-                      value={pdf.linked_form_fields_radio?.map(r => `${r.radioField}|${r.displayName}`).join('\n') || ''}
-                      onChange={e => {
-                        const lines = e.target.value.split('\n').filter(l => l.trim());
-                        const radios = lines.map(line => {
-                          const [radioField, displayName] = line.split('|').map(p => p.trim());
-                          return { radioField: radioField || '', displayName: displayName || radioField || '' };
-                        }).filter(r => r.radioField);
-                        updatePdfAttribute(index, 'linked_form_fields_radio', radios.length > 0 ? radios : undefined);
-                      }}
-                      rows={3}
-                      placeholder="radio_field_1|Display Name 1\nradio_field_2|Display Name 2"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Format: pdf_field_name|Display Name (one per line)
-                    </p>
+                    <div className="space-y-2">
+                      {(pdf.linked_form_fields_radio || []).map((radio, radioIndex) => (
+                        <Card key={radioIndex} className="p-3">
+                          <div className="flex gap-2">
+                            <div className="flex-1 space-y-2">
+                              <Input
+                                value={radio.radioField}
+                                onChange={e => {
+                                  const newRadios = [...(pdf.linked_form_fields_radio || [])];
+                                  newRadios[radioIndex] = { ...newRadios[radioIndex], radioField: e.target.value };
+                                  updatePdfAttribute(index, 'linked_form_fields_radio', newRadios);
+                                }}
+                                placeholder="PDF radio field"
+                              />
+                              <Input
+                                value={radio.displayName}
+                                onChange={e => {
+                                  const newRadios = [...(pdf.linked_form_fields_radio || [])];
+                                  newRadios[radioIndex] = { ...newRadios[radioIndex], displayName: e.target.value };
+                                  updatePdfAttribute(index, 'linked_form_fields_radio', newRadios);
+                                }}
+                                placeholder="Display name"
+                              />
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const newRadios = (pdf.linked_form_fields_radio || []).filter((_, i) => i !== radioIndex);
+                                updatePdfAttribute(index, 'linked_form_fields_radio', newRadios.length > 0 ? newRadios : undefined);
+                              }}
+                              className="self-start"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </Card>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const newRadios = [...(pdf.linked_form_fields_radio || []), { radioField: '', displayName: '' }];
+                          updatePdfAttribute(index, 'linked_form_fields_radio', newRadios);
+                        }}
+                        className="w-full"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Radio Field
+                      </Button>
+                    </div>
                   </div>
 
                   {/* Linked Checkbox Fields */}
                   <div>
                     <Label>Linked Checkbox Fields</Label>
-                    <Textarea
-                      value={pdf.linked_form_fields_checkbox?.map(c => `${c.fromDatabase}|${c.pdfAttribute}`).join('\n') || ''}
-                      onChange={e => {
-                        const lines = e.target.value.split('\n').filter(l => l.trim());
-                        const checkboxes = lines.map(line => {
-                          const [fromDatabase, pdfAttribute] = line.split('|').map(p => p.trim());
-                          return { fromDatabase: fromDatabase || '', pdfAttribute: pdfAttribute || '' };
-                        }).filter(c => c.fromDatabase && c.pdfAttribute);
-                        updatePdfAttribute(index, 'linked_form_fields_checkbox', checkboxes.length > 0 ? checkboxes : undefined);
-                      }}
-                      rows={3}
-                      placeholder="database_value|pdf_checkbox_field"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Format: database_value|pdf_field_name (one per line)
-                    </p>
+                    <div className="space-y-2">
+                      {(pdf.linked_form_fields_checkbox || []).map((checkbox, checkboxIndex) => (
+                        <Card key={checkboxIndex} className="p-3">
+                          <div className="flex gap-2">
+                            <div className="flex-1 space-y-2">
+                              <Input
+                                value={checkbox.fromDatabase}
+                                onChange={e => {
+                                  const newCheckboxes = [...(pdf.linked_form_fields_checkbox || [])];
+                                  newCheckboxes[checkboxIndex] = { ...newCheckboxes[checkboxIndex], fromDatabase: e.target.value };
+                                  updatePdfAttribute(index, 'linked_form_fields_checkbox', newCheckboxes);
+                                }}
+                                placeholder="Database value"
+                              />
+                              <Input
+                                value={checkbox.pdfAttribute}
+                                onChange={e => {
+                                  const newCheckboxes = [...(pdf.linked_form_fields_checkbox || [])];
+                                  newCheckboxes[checkboxIndex] = { ...newCheckboxes[checkboxIndex], pdfAttribute: e.target.value };
+                                  updatePdfAttribute(index, 'linked_form_fields_checkbox', newCheckboxes);
+                                }}
+                                placeholder="PDF field name"
+                              />
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const newCheckboxes = (pdf.linked_form_fields_checkbox || []).filter((_, i) => i !== checkboxIndex);
+                                updatePdfAttribute(index, 'linked_form_fields_checkbox', newCheckboxes.length > 0 ? newCheckboxes : undefined);
+                              }}
+                              className="self-start"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </Card>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const newCheckboxes = [...(pdf.linked_form_fields_checkbox || []), { fromDatabase: '', pdfAttribute: '' }];
+                          updatePdfAttribute(index, 'linked_form_fields_checkbox', newCheckboxes);
+                        }}
+                        className="w-full"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Checkbox Field
+                      </Button>
+                    </div>
                   </div>
 
                   {/* Linked Date Fields */}
                   <div>
                     <Label>Linked Date Fields</Label>
-                    <Input
-                      value={pdf.linked_dates?.map(d => d.dateFieldName).join(', ') || ''}
-                      onChange={e => {
-                        const fields = e.target.value.split(',').map(f => f.trim()).filter(f => f);
-                        const dates = fields.map(f => ({ dateFieldName: f }));
-                        updatePdfAttribute(index, 'linked_dates', dates.length > 0 ? dates : undefined);
-                      }}
-                      placeholder="date_field_1, date_field_2"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Comma-separated list of date fields
-                    </p>
+                    <div className="space-y-2">
+                      {(pdf.linked_dates || []).map((date, dateIndex) => (
+                        <Card key={dateIndex} className="p-3">
+                          <div className="flex gap-2 items-center">
+                            <Input
+                              value={date.dateFieldName}
+                              onChange={e => {
+                                const newDates = [...(pdf.linked_dates || [])];
+                                newDates[dateIndex] = { dateFieldName: e.target.value };
+                                updatePdfAttribute(index, 'linked_dates', newDates);
+                              }}
+                              placeholder="Date field name"
+                              className="flex-1"
+                            />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const newDates = (pdf.linked_dates || []).filter((_, i) => i !== dateIndex);
+                                updatePdfAttribute(index, 'linked_dates', newDates.length > 0 ? newDates : undefined);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </Card>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const newDates = [...(pdf.linked_dates || []), { dateFieldName: '' }];
+                          updatePdfAttribute(index, 'linked_dates', newDates);
+                        }}
+                        className="w-full"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Date Field
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1549,14 +1676,36 @@ function FieldEditor({ item, onUpdate, onDelete, onDuplicate, index, onMove, onM
 
 export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorProps) {
 
-  const addNewField = useCallback(() => {
-    const maxOrder = schema.length > 0 ? Math.max(...schema.map(s => s.display_attributes.order)) : 0;
+  const addNewField = useCallback((afterOrder?: number) => {
+    const newSchema = [...schema];
+    const sortedSchema = [...newSchema].sort((a, b) => a.display_attributes.order - b.display_attributes.order);
+    
+    // Determine the order for the new field
+    let newOrder: number;
+    if (afterOrder !== undefined) {
+      // Insert after the specified order
+      newOrder = afterOrder + 1;
+      // Shift all items with order >= newOrder
+      sortedSchema.forEach(item => {
+        if (item.display_attributes.order >= newOrder) {
+          const originalItem = newSchema.find(s => s.unique_id === item.unique_id);
+          if (originalItem) {
+            originalItem.display_attributes.order += 1;
+          }
+        }
+      });
+    } else {
+      // Add at the end
+      const maxOrder = schema.length > 0 ? Math.max(...schema.map(s => s.display_attributes.order)) : 0;
+      newOrder = maxOrder + 1;
+    }
+    
     const newField: SchemaItem = {
       unique_id: generateUniqueId(),
       display_attributes: {
         display_name: 'New Field',
         input_type: 'text',
-        order: maxOrder + 1,
+        order: newOrder,
         width: 12,
         value: {
           type: 'manual'
@@ -1564,7 +1713,7 @@ export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorPro
       }
     };
     
-    onSchemaChange([...schema, newField]);
+    onSchemaChange([...newSchema, newField]);
   }, [schema, onSchemaChange]);
 
   const updateField = useCallback((index: number, updatedItem: SchemaItem) => {
@@ -1664,7 +1813,7 @@ export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorPro
     <div className="space-y-4 h-full">
       <div className="flex items-center justify-between px-1">
         <h2 className="text-lg font-semibold">Schema Editor</h2>
-        <Button onClick={addNewField} className="gap-2">
+        <Button onClick={() => addNewField()} className="gap-2">
           <Plus className="h-4 w-4" />
           Add Field
         </Button>
@@ -1680,21 +1829,44 @@ export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorPro
             sortedSchema.map((item, index) => {
               const originalIndex = schema.findIndex(field => field.unique_id === item.unique_id);
               return (
-                <FieldEditor
-                  key={item.unique_id}
-                  item={item}
-                  index={index}
-                  onUpdate={updatedItem => updateField(originalIndex, updatedItem)}
-                  onDelete={() => deleteField(originalIndex)}
-                  onDuplicate={() => duplicateField(originalIndex)}
-                  onMove={moveField}
-                  onMoveUp={() => moveFieldUp(index)}
-                  onMoveDown={() => moveFieldDown(index)}
-                  canMoveUp={index > 0}
-                  canMoveDown={index < sortedSchema.length - 1}
-                  schema={schema}
-                  onReorder={reorderField}
-                />
+                <React.Fragment key={item.unique_id}>
+                  {index === 0 && (
+                    <div className="flex justify-center py-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => addNewField(0)}
+                        className="h-8 px-3 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                  <FieldEditor
+                    item={item}
+                    index={index}
+                    onUpdate={updatedItem => updateField(originalIndex, updatedItem)}
+                    onDelete={() => deleteField(originalIndex)}
+                    onDuplicate={() => duplicateField(originalIndex)}
+                    onMove={moveField}
+                    onMoveUp={() => moveFieldUp(index)}
+                    onMoveDown={() => moveFieldDown(index)}
+                    canMoveUp={index > 0}
+                    canMoveDown={index < sortedSchema.length - 1}
+                    schema={schema}
+                    onReorder={reorderField}
+                  />
+                  <div className="flex justify-center py-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => addNewField(item.display_attributes.order)}
+                      className="h-8 px-3 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </React.Fragment>
               );
             })
           )}
