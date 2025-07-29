@@ -1822,7 +1822,7 @@ export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorPro
       </div>
 
       <ScrollArea className="h-[calc(100vh-180px)]">
-        <div className="space-y-4 pr-4">
+        <div className="space-y-2 pr-4">
           {sortedSchema.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <p>No fields in schema. Click &quot;Add Field&quot; to get started.</p>
@@ -1833,14 +1833,14 @@ export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorPro
               return (
                 <React.Fragment key={item.unique_id}>
                   {index === 0 && (
-                    <div className="flex justify-center py-2">
+                    <div className="flex justify-center py-0.5">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => addNewField(0)}
-                        className="h-8 px-3 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                        className="h-6 px-2 hover:bg-blue-50 hover:text-blue-600 transition-colors opacity-50 hover:opacity-100"
                       >
-                        <Plus className="h-4 w-4" />
+                        <Plus className="h-3 w-3" />
                       </Button>
                     </div>
                   )}
@@ -1858,14 +1858,14 @@ export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorPro
                     schema={schema}
                     onReorder={reorderField}
                   />
-                  <div className="flex justify-center py-2">
+                  <div className="flex justify-center py-0.5">
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => addNewField(item.display_attributes.order)}
-                      className="h-8 px-3 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                      className="h-6 px-2 hover:bg-blue-50 hover:text-blue-600 transition-colors opacity-50 hover:opacity-100"
                     >
-                      <Plus className="h-4 w-4" />
+                      <Plus className="h-3 w-3" />
                     </Button>
                   </div>
                 </React.Fragment>
