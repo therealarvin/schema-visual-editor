@@ -1777,10 +1777,38 @@ export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorPro
     onSchemaChange(newSchema);
   }, [schema, onSchemaChange]);
 
-  const sortedSchema = useMemo(() => 
-    [...schema].sort((a, b) => a.display_attributes.order - b.display_attributes.order),
-    [schema]
-  );
+  const sortedSchema = useMemo(() => {
+    // First, create a map of block names to their minimum order
+    const blockMinOrder = new Map<string, number>();
+    schema.forEach(item => {
+      const block = item.display_attributes.block;
+      if (block) {
+        const currentMin = blockMinOrder.get(block);
+        if (currentMin === undefined || item.display_attributes.order < currentMin) {
+          blockMinOrder.set(block, item.display_attributes.order);
+        }
+      }
+    });
+    
+    return [...schema].sort((a, b) => {
+      const blockA = a.display_attributes.block || '';
+      const blockB = b.display_attributes.block || '';
+      
+      if (blockA !== blockB) {
+        // If one has no block and the other does, no-block items come first
+        if (!blockA) return -1;
+        if (!blockB) return 1;
+        
+        // Sort blocks by their minimum order value
+        const minOrderA = blockMinOrder.get(blockA) || 0;
+        const minOrderB = blockMinOrder.get(blockB) || 0;
+        return minOrderA - minOrderB;
+      }
+      
+      // Within the same block (or both without blocks), sort by order
+      return a.display_attributes.order - b.display_attributes.order;
+    });
+  }, [schema]);
 
   const moveFieldUp = useCallback((index: number) => {
     if (index > 0) {
@@ -1846,7 +1874,7 @@ export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorPro
             sortedSchema.map((item, index) => {
               const originalIndex = schema.findIndex(field => field.unique_id === item.unique_id);
               return (
-                <React.Fragment key={item.unique_id}>
+                <React.Fragment key={`field-${originalIndex}`}>
                   {index === 0 && (
                     <div className="flex justify-center py-0.5">
                       <Button
