@@ -480,6 +480,21 @@ function FieldEditor({ item, onUpdate, onDelete, onDuplicate, index, onMove, onM
                     Block: {item.display_attributes.block}
                   </Badge>
                 )}
+                {item.pdf_attributes && item.pdf_attributes.length > 0 && (
+                  <>
+                    {item.pdf_attributes.map((pdf, pdfIndex) => (
+                      <Badge 
+                        key={pdfIndex} 
+                        variant="default" 
+                        className="text-xs bg-purple-100 text-purple-800 border-purple-200"
+                        title={`PDF: ${pdf.formType} → ${pdf.formfield}`}
+                      >
+                        <FileText className="h-3 w-3 mr-1" />
+                        {pdf.formfield}
+                      </Badge>
+                    ))}
+                  </>
+                )}
               </div>
             </div>
           </div>
