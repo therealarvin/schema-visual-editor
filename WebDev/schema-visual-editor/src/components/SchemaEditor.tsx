@@ -1750,14 +1750,19 @@ function FieldEditor({ item, onUpdate, onDelete, onDuplicate, index, onMove, onM
 
 export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorProps) {
   const [sortByBlock, setSortByBlock] = useState<boolean>(() => {
-    // Load preference from localStorage
-    const saved = localStorage.getItem('schemaEditor.sortByBlock');
-    return saved === null ? true : saved === 'true';
+    // Load preference from localStorage only in browser
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('schemaEditor.sortByBlock');
+      return saved === null ? true : saved === 'true';
+    }
+    return true; // Default to sorting by block
   });
 
   // Save preference to localStorage when it changes
   useEffect(() => {
-    localStorage.setItem('schemaEditor.sortByBlock', sortByBlock.toString());
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('schemaEditor.sortByBlock', sortByBlock.toString());
+    }
   }, [sortByBlock]);
 
   const addNewField = useCallback((afterOrder?: number) => {
