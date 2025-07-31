@@ -1765,28 +1765,29 @@ export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorPro
     }
   }, [sortByBlock]);
 
+  // Function to normalize order numbers to match array positions
+  const normalizeOrderNumbers = useCallback((schemaItems: SchemaItem[]): SchemaItem[] => {
+    return schemaItems.map((item, index) => ({
+      ...item,
+      display_attributes: {
+        ...item.display_attributes,
+        order: index + 1
+      }
+    }));
+  }, []);
+
+
   const addNewField = useCallback((afterOrder?: number) => {
     const newSchema = [...schema];
-    const sortedSchema = [...newSchema].sort((a, b) => a.display_attributes.order - b.display_attributes.order);
     
-    // Determine the order for the new field
-    let newOrder: number;
+    let insertIndex: number;
     if (afterOrder !== undefined) {
-      // Insert after the specified order
-      newOrder = afterOrder + 1;
-      // Shift all items with order >= newOrder
-      sortedSchema.forEach(item => {
-        if (item.display_attributes.order >= newOrder) {
-          const originalItem = newSchema.find(s => s.unique_id === item.unique_id);
-          if (originalItem) {
-            originalItem.display_attributes.order += 1;
-          }
-        }
-      });
+      // Find the item with the specified order
+      const itemIndex = newSchema.findIndex(item => item.display_attributes.order === afterOrder);
+      insertIndex = itemIndex !== -1 ? itemIndex + 1 : newSchema.length;
     } else {
       // Add at the end
-      const maxOrder = schema.length > 0 ? Math.max(...schema.map(s => s.display_attributes.order)) : 0;
-      newOrder = maxOrder + 1;
+      insertIndex = newSchema.length;
     }
     
     const newField: SchemaItem = {
@@ -1794,7 +1795,7 @@ export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorPro
       display_attributes: {
         display_name: 'New Field',
         input_type: 'text',
-        order: newOrder,
+        order: insertIndex + 1, // Will be normalized
         width: 12,
         value: {
           type: 'manual'
@@ -1802,10 +1803,13 @@ export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorPro
       }
     };
     
-    // Sort the schema by order to maintain proper JSON structure
-    const finalSchema = [...newSchema, newField].sort((a, b) => a.display_attributes.order - b.display_attributes.order);
-    onSchemaChange(finalSchema);
-  }, [schema, onSchemaChange]);
+    // Insert the new field at the correct position
+    newSchema.splice(insertIndex, 0, newField);
+    
+    // Normalize all order numbers to match positions
+    const normalizedSchema = normalizeOrderNumbers(newSchema);
+    onSchemaChange(normalizedSchema);
+  }, [schema, onSchemaChange, normalizeOrderNumbers]);
 
   const updateField = useCallback((index: number, updatedItem: SchemaItem) => {
     const newSchema = [...schema];
@@ -1815,24 +1819,31 @@ export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorPro
 
   const deleteField = useCallback((index: number) => {
     const newSchema = schema.filter((_, i) => i !== index);
-    onSchemaChange(newSchema);
-  }, [schema, onSchemaChange]);
+    // Normalize order numbers after deletion
+    const normalizedSchema = normalizeOrderNumbers(newSchema);
+    onSchemaChange(normalizedSchema);
+  }, [schema, onSchemaChange, normalizeOrderNumbers]);
 
   const duplicateField = useCallback((index: number) => {
     const originalField = schema[index];
-    const maxOrder = schema.length > 0 ? Math.max(...schema.map(s => s.display_attributes.order)) : 0;
     const duplicatedField: SchemaItem = {
       ...JSON.parse(JSON.stringify(originalField)),
       unique_id: generateUniqueId(),
       display_attributes: {
         ...originalField.display_attributes,
         display_name: originalField.display_attributes.display_name ? `${originalField.display_attributes.display_name} (Copy)` : 'Field Copy',
-        order: maxOrder + 1
+        order: index + 2 // Will be normalized
       }
     };
     
-    onSchemaChange([...schema, duplicatedField]);
-  }, [schema, onSchemaChange]);
+    // Insert right after the original field
+    const newSchema = [...schema];
+    newSchema.splice(index + 1, 0, duplicatedField);
+    
+    // Normalize order numbers
+    const normalizedSchema = normalizeOrderNumbers(newSchema);
+    onSchemaChange(normalizedSchema);
+  }, [schema, onSchemaChange, normalizeOrderNumbers]);
 
   const moveField = useCallback((dragIndex: number, hoverIndex: number) => {
     const newSchema = [...schema];
@@ -1843,13 +1854,10 @@ export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorPro
     // Insert at new position
     newSchema.splice(hoverIndex, 0, draggedItem);
     
-    // Update order numbers to match new positions
-    newSchema.forEach((item, index) => {
-      item.display_attributes.order = index + 1;
-    });
-    
-    onSchemaChange(newSchema);
-  }, [schema, onSchemaChange]);
+    // Normalize order numbers to match positions
+    const normalizedSchema = normalizeOrderNumbers(newSchema);
+    onSchemaChange(normalizedSchema);
+  }, [schema, onSchemaChange, normalizeOrderNumbers]);
 
   const sortedSchema = useMemo(() => {
     if (!sortByBlock) {
@@ -1903,37 +1911,23 @@ export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorPro
   }, [moveField, schema.length]);
 
   const reorderField = useCallback((itemId: string, newOrder: number) => {
-    const currentItem = schema.find(item => item.unique_id === itemId);
-    if (!currentItem) return;
+    const currentIndex = schema.findIndex(item => item.unique_id === itemId);
+    if (currentIndex === -1) return;
+
+    const clampedOrder = Math.max(1, Math.min(newOrder, schema.length));
+    const targetIndex = clampedOrder - 1;
+    
+    // If the target position is the same as current, do nothing
+    if (currentIndex === targetIndex) return;
 
     const newSchema = [...schema];
-    const maxOrder = Math.max(...newSchema.map(s => s.display_attributes.order));
-    const clampedOrder = Math.max(1, Math.min(newOrder, maxOrder));
+    const [movedItem] = newSchema.splice(currentIndex, 1);
+    newSchema.splice(targetIndex, 0, movedItem);
     
-    // If the new order is the same, do nothing
-    if (currentItem.display_attributes.order === clampedOrder) return;
-
-    // Get all items sorted by current order
-    const sortedItems = [...newSchema].sort((a, b) => a.display_attributes.order - b.display_attributes.order);
-    
-    // Remove the item from its current position
-    const currentIndex = sortedItems.findIndex(item => item.unique_id === itemId);
-    const [movedItem] = sortedItems.splice(currentIndex, 1);
-    
-    // Insert at the new position (adjust for 0-based index)
-    sortedItems.splice(clampedOrder - 1, 0, movedItem);
-    
-    // Update all order numbers
-    sortedItems.forEach((item, index) => {
-      item.display_attributes.order = index + 1;
-    });
-    
-    // Now we need to rearrange the original schema array to match the new order
-    // Sort the final schema by the updated order values
-    const finalSchema = sortedItems.sort((a, b) => a.display_attributes.order - b.display_attributes.order);
-    
-    onSchemaChange(finalSchema);
-  }, [schema, onSchemaChange]);
+    // Normalize all order numbers to ensure they match positions
+    const normalizedSchema = normalizeOrderNumbers(newSchema);
+    onSchemaChange(normalizedSchema);
+  }, [schema, onSchemaChange, normalizeOrderNumbers]);
 
   return (
     <div className="space-y-4 h-full">
