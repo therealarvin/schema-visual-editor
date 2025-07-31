@@ -1925,13 +1925,14 @@ export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorPro
     
     // Update all order numbers
     sortedItems.forEach((item, index) => {
-      const originalItem = newSchema.find(s => s.unique_id === item.unique_id);
-      if (originalItem) {
-        originalItem.display_attributes.order = index + 1;
-      }
+      item.display_attributes.order = index + 1;
     });
     
-    onSchemaChange(newSchema);
+    // Now we need to rearrange the original schema array to match the new order
+    // Sort the final schema by the updated order values
+    const finalSchema = sortedItems.sort((a, b) => a.display_attributes.order - b.display_attributes.order);
+    
+    onSchemaChange(finalSchema);
   }, [schema, onSchemaChange]);
 
   return (

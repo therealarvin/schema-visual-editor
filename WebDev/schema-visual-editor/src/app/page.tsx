@@ -550,13 +550,39 @@ export default function Home() {
                           </Button>
                         </div>
                       </div>
-                      <div className="flex-1 overflow-auto border rounded-lg">
-                        <Textarea
-                          value={jsonEditorValue}
-                          onChange={(e) => handleJsonChange(e.target.value)}
-                          className="h-full min-h-[600px] font-mono text-sm border-0 resize-none focus-visible:ring-0"
-                          placeholder="Enter your schema JSON here..."
-                        />
+                      <div className="flex-1 border rounded-lg bg-gray-50 relative overflow-hidden">
+                        <div className="absolute inset-0 flex">
+                          {/* Line numbers */}
+                          <div className="overflow-y-auto overflow-x-hidden bg-gray-100 text-gray-500 text-right font-mono text-sm select-none border-r" 
+                               style={{ width: '50px', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                               ref={(el) => {
+                                 if (el) el.style.cssText += '-webkit-scrollbar: none;';
+                               }}>
+                            <div className="px-2 py-3">
+                              {jsonEditorValue.split('\n').map((_, index) => (
+                                <div key={index} className="leading-6 pr-2">
+                                  {index + 1}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          {/* Editor */}
+                          <div className="flex-1 overflow-auto"
+                               onScroll={(e) => {
+                                 const lineNumbers = e.currentTarget.previousElementSibling as HTMLElement;
+                                 if (lineNumbers) {
+                                   lineNumbers.scrollTop = e.currentTarget.scrollTop;
+                                 }
+                               }}>
+                            <Textarea
+                              value={jsonEditorValue}
+                              onChange={(e) => handleJsonChange(e.target.value)}
+                              className="w-full font-mono text-sm border-0 resize-none focus-visible:ring-0 bg-transparent p-3 leading-6"
+                              placeholder="Enter your schema JSON here..."
+                              style={{ minHeight: '600px' }}
+                            />
+                          </div>
+                        </div>
                       </div>
                       <div className="mt-3 text-xs text-gray-500">
                         <p>Edit the schema JSON directly. Click &quot;Apply Changes&quot; to update the schema.</p>
