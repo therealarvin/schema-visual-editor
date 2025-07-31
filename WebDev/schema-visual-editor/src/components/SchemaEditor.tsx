@@ -24,6 +24,7 @@ import {
   FileText,
   Code,
   Eye,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Schema, SchemaItem } from '@/types/schema';
@@ -287,16 +288,38 @@ function FieldEditor({ item, onUpdate, onDelete, onDuplicate, index, onMove, onM
   const updateCheckboxOption = useCallback((index: number, field: string, value: any) => {
     const current = item.display_attributes.checkbox_options || { options: [] };
     const newOptions = [...current.options];
-    if (field === 'linkedFields') {
-      // Handle linked fields as comma-separated string
-      const fields = value.split(',').map((f: string) => f.trim()).filter((f: string) => f);
-      newOptions[index] = {
-        ...newOptions[index],
-        linkedFields: fields.length > 0 ? fields : undefined
+    newOptions[index] = { ...newOptions[index], [field]: value };
+    updateField('display_attributes.checkbox_options', {
+      ...current,
+      options: newOptions
+    });
+  }, [item.display_attributes.checkbox_options, updateField]);
+
+  const addLinkedFieldToOption = useCallback((optionIndex: number, fieldId: string) => {
+    const current = item.display_attributes.checkbox_options || { options: [] };
+    const newOptions = [...current.options];
+    const currentLinkedFields = newOptions[optionIndex].linkedFields || [];
+    if (!currentLinkedFields.includes(fieldId)) {
+      newOptions[optionIndex] = {
+        ...newOptions[optionIndex],
+        linkedFields: [...currentLinkedFields, fieldId]
       };
-    } else {
-      newOptions[index] = { ...newOptions[index], [field]: value };
+      updateField('display_attributes.checkbox_options', {
+        ...current,
+        options: newOptions
+      });
     }
+  }, [item.display_attributes.checkbox_options, updateField]);
+
+  const removeLinkedFieldFromOption = useCallback((optionIndex: number, fieldId: string) => {
+    const current = item.display_attributes.checkbox_options || { options: [] };
+    const newOptions = [...current.options];
+    const currentLinkedFields = newOptions[optionIndex].linkedFields || [];
+    const updatedLinkedFields = currentLinkedFields.filter(id => id !== fieldId);
+    newOptions[optionIndex] = {
+      ...newOptions[optionIndex],
+      linkedFields: updatedLinkedFields.length > 0 ? updatedLinkedFields : undefined
+    };
     updateField('display_attributes.checkbox_options', {
       ...current,
       options: newOptions
@@ -807,30 +830,66 @@ function FieldEditor({ item, onUpdate, onDelete, onDuplicate, index, onMove, onM
                                 placeholder="e.g., pool"
                               />
                             </div>
-                            <div>
+                            <div className="col-span-full">
                               <Label>Linked Fields</Label>
-                              <div className="flex gap-1">
-                                <Input
-                                  value={option.linkedFields?.join(', ') || ''}
-                                  onChange={e => updateCheckboxOption(optionIndex, 'linkedFields', e.target.value)}
-                                  placeholder="field1, field2"
-                                />
-                                <Button
-                                  onClick={() => removeCheckboxOption(optionIndex)}
-                                  size="sm"
-                                  variant="ghost"
-                                  className="px-2"
+                              <div className="space-y-2">
+                                {/* Display existing linked fields */}
+                                {option.linkedFields && option.linkedFields.length > 0 && (
+                                  <div className="flex flex-wrap gap-2">
+                                    {option.linkedFields.map((fieldId) => {
+                                      const linkedField = schema.find(f => f.unique_id === fieldId);
+                                      return (
+                                        <div key={fieldId} className="flex items-center gap-1 bg-gray-100 rounded px-2 py-1 text-sm">
+                                          <span>{linkedField?.display_attributes.display_name || fieldId}</span>
+                                          <Button
+                                            onClick={() => removeLinkedFieldFromOption(optionIndex, fieldId)}
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-4 w-4 p-0"
+                                          >
+                                            <X className="h-3 w-3" />
+                                          </Button>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                                
+                                {/* Add new linked field dropdown */}
+                                <Select
+                                  value=""
+                                  onValueChange={(fieldId) => addLinkedFieldToOption(optionIndex, fieldId)}
                                 >
-                                  <Trash2 className="h-4 w-4 text-red-600" />
-                                </Button>
+                                  <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Add linked field..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {schema
+                                      .filter(f => 
+                                        f.unique_id !== item.unique_id && 
+                                        !option.linkedFields?.includes(f.unique_id)
+                                      )
+                                      .map(field => (
+                                        <SelectItem key={field.unique_id} value={field.unique_id}>
+                                          {field.display_attributes.display_name || field.unique_id}
+                                        </SelectItem>
+                                      ))
+                                    }
+                                  </SelectContent>
+                                </Select>
                               </div>
+                              
+                              <Button
+                                onClick={() => removeCheckboxOption(optionIndex)}
+                                size="sm"
+                                variant="destructive"
+                                className="mt-2"
+                              >
+                                <Trash2 className="h-4 w-4 mr-1" />
+                                Remove Option
+                              </Button>
                             </div>
                           </div>
-                          {option.linkedFields && option.linkedFields.length > 0 && (
-                            <p className="text-xs text-muted-foreground">
-                              Linked fields ({option.linkedFields.join(', ')}) will be shown when this option is selected.
-                            </p>
-                          )}
                         </div>
                       ))}
                       
@@ -1690,6 +1749,16 @@ function FieldEditor({ item, onUpdate, onDelete, onDuplicate, index, onMove, onM
 }
 
 export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorProps) {
+  const [sortByBlock, setSortByBlock] = useState<boolean>(() => {
+    // Load preference from localStorage
+    const saved = localStorage.getItem('schemaEditor.sortByBlock');
+    return saved === null ? true : saved === 'true';
+  });
+
+  // Save preference to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem('schemaEditor.sortByBlock', sortByBlock.toString());
+  }, [sortByBlock]);
 
   const addNewField = useCallback((afterOrder?: number) => {
     const newSchema = [...schema];
@@ -1778,6 +1847,12 @@ export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorPro
   }, [schema, onSchemaChange]);
 
   const sortedSchema = useMemo(() => {
+    if (!sortByBlock) {
+      // Sort only by order when sortByBlock is false
+      return [...schema].sort((a, b) => a.display_attributes.order - b.display_attributes.order);
+    }
+    
+    // Original block-based sorting logic
     // First, create a map of block names to their minimum order
     const blockMinOrder = new Map<string, number>();
     schema.forEach(item => {
@@ -1808,7 +1883,7 @@ export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorPro
       // Within the same block (or both without blocks), sort by order
       return a.display_attributes.order - b.display_attributes.order;
     });
-  }, [schema]);
+  }, [schema, sortByBlock]);
 
   const moveFieldUp = useCallback((index: number) => {
     if (index > 0) {
@@ -1857,7 +1932,17 @@ export default function SchemaEditor({ schema, onSchemaChange }: SchemaEditorPro
   return (
     <div className="space-y-4 h-full">
       <div className="flex items-center justify-between px-1">
-        <h2 className="text-lg font-semibold">Schema Editor</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold">Schema Editor</h2>
+          <Button
+            variant={sortByBlock ? "default" : "outline"}
+            size="sm"
+            onClick={() => setSortByBlock(!sortByBlock)}
+            className="text-xs"
+          >
+            {sortByBlock ? "Sorted by Block" : "Sorted by Order"}
+          </Button>
+        </div>
         <Button onClick={() => addNewField()} className="gap-2">
           <Plus className="h-4 w-4" />
           Add Field
