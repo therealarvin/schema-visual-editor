@@ -11,14 +11,17 @@ import { toast } from 'sonner';
 
 import SchemaEditor from '@/components/SchemaEditor';
 import FormPreview from '@/components/FormPreview';
+import { JsonEditor } from '@/components/JsonEditor';
 import { Schema } from '@/types/schema';
 import { sampleSchema } from '@/lib/utils';
+import { autofixJson } from '@/lib/json-autofix';
 
 export default function Home() {
   const [schema, setSchema] = useState<Schema>(sampleSchema);
   const [activeTab, setActiveTab] = useState('editor');
   const [jsonEditorValue, setJsonEditorValue] = useState('');
   const [jsonHasChanges, setJsonHasChanges] = useState(false);
+  const [jsonError, setJsonError] = useState<{ line: number; column: number; message: string } | null>(null);
   const [showPreview, setShowPreview] = useState(true);
   const [editorWidth, setEditorWidth] = useState(33.33); // Percentage width for editor
   const [isResizing, setIsResizing] = useState(false);
@@ -36,6 +39,7 @@ export default function Home() {
   const handleJsonChange = useCallback((value: string) => {
     setJsonEditorValue(value);
     setJsonHasChanges(JSON.stringify(schema, null, 2) !== value);
+    setJsonError(null); // Clear error when user types
   }, [schema]);
 
   const applyJsonChanges = useCallback(() => {
@@ -114,6 +118,7 @@ export default function Home() {
       
       setSchema(parsedSchema);
       setJsonHasChanges(false);
+      setJsonError(null);
       toast.success('Schema updated from JSON!');
     } catch (error) {
       if (error instanceof SyntaxError) {
@@ -125,18 +130,62 @@ export default function Home() {
           const lines = jsonEditorValue.substring(0, position).split('\n');
           const lineNumber = lines.length;
           const columnNumber = lines[lines.length - 1].length + 1;
+          setJsonError({
+            line: lineNumber,
+            column: columnNumber,
+            message: errorMessage
+          });
           toast.error(`JSON Syntax Error at line ${lineNumber}, column ${columnNumber}: ${errorMessage}`);
         } else {
+          // Try to extract line/column from other error formats
+          const lineMatch = errorMessage.match(/line (\d+)/);
+          const colMatch = errorMessage.match(/column (\d+)/);
+          if (lineMatch || colMatch) {
+            setJsonError({
+              line: lineMatch ? parseInt(lineMatch[1]) : 1,
+              column: colMatch ? parseInt(colMatch[1]) : 1,
+              message: errorMessage
+            });
+          } else {
+            setJsonError({
+              line: 1,
+              column: 1,
+              message: errorMessage
+            });
+          }
           toast.error(`JSON Syntax Error: ${errorMessage}`);
         }
       } else {
-        toast.error(`Failed to apply changes: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        // For validation errors, try to extract field info
+        const fieldMatch = errorMsg.match(/at index (\d+)|Field '([^']+)'/);
+        if (fieldMatch) {
+          const index = fieldMatch[1] ? parseInt(fieldMatch[1]) : -1;
+          const fieldName = fieldMatch[2];
+          // Try to find the line number of the problematic field
+          const lines = jsonEditorValue.split('\n');
+          let targetLine = 1;
+          for (let i = 0; i < lines.length; i++) {
+            if ((index >= 0 && lines[i].includes(`"unique_id"`) && lines.slice(0, i + 1).join('\n').split('"unique_id"').length - 1 === index + 1) ||
+                (fieldName && lines[i].includes(`"${fieldName}"`))) {
+              targetLine = i + 1;
+              break;
+            }
+          }
+          setJsonError({
+            line: targetLine,
+            column: 1,
+            message: errorMsg
+          });
+        }
+        toast.error(`Failed to apply changes: ${errorMsg}`);
       }
     }
   }, [jsonEditorValue]);
 
   const resetJsonEditor = useCallback(() => {
     initializeJsonEditor();
+    setJsonError(null);
     toast.success('JSON editor reset to current schema');
   }, [initializeJsonEditor]);
 
@@ -190,6 +239,39 @@ export default function Home() {
         toast.error('Comments removed, but please check for remaining syntax errors');
       }
     }
+  }, [jsonEditorValue]);
+
+  const handleAutofix = useCallback(() => {
+    if (!jsonEditorValue.trim()) {
+      toast.error('No JSON content to fix');
+      return;
+    }
+
+    const { fixed, changes } = autofixJson(jsonEditorValue);
+    
+    if (changes.length === 0) {
+      toast.info('No auto-fixable issues found');
+      return;
+    }
+
+    setJsonEditorValue(fixed);
+    setJsonError(null);
+    toast.success(`Applied ${changes.length} fixes: ${changes.join(', ')}`);
+    
+    // Try to apply the fixed JSON
+    setTimeout(() => {
+      try {
+        const parsedSchema = JSON.parse(fixed);
+        if (Array.isArray(parsedSchema)) {
+          setSchema(parsedSchema);
+          setJsonHasChanges(false);
+          toast.success('Schema updated with auto-fixed JSON!');
+        }
+      } catch (e) {
+        // If still has errors, at least we improved it
+        toast.info('JSON improved but still has errors. Please review.');
+      }
+    }, 100);
   }, [jsonEditorValue]);
 
   const exportSchema = useCallback(() => {
@@ -550,40 +632,14 @@ export default function Home() {
                           </Button>
                         </div>
                       </div>
-                      <div className="flex-1 border rounded-lg bg-gray-50 relative overflow-hidden">
-                        <div className="absolute inset-0 flex">
-                          {/* Line numbers */}
-                          <div className="overflow-y-auto overflow-x-hidden bg-gray-100 text-gray-500 text-right font-mono text-sm select-none border-r" 
-                               style={{ width: '50px', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-                               ref={(el) => {
-                                 if (el) el.style.cssText += '-webkit-scrollbar: none;';
-                               }}>
-                            <div className="px-2 py-3">
-                              {jsonEditorValue.split('\n').map((_, index) => (
-                                <div key={index} className="leading-6 pr-2">
-                                  {index + 1}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          {/* Editor */}
-                          <div className="flex-1 overflow-auto"
-                               onScroll={(e) => {
-                                 const lineNumbers = e.currentTarget.previousElementSibling as HTMLElement;
-                                 if (lineNumbers) {
-                                   lineNumbers.scrollTop = e.currentTarget.scrollTop;
-                                 }
-                               }}>
-                            <Textarea
-                              value={jsonEditorValue}
-                              onChange={(e) => handleJsonChange(e.target.value)}
-                              className="w-full font-mono text-sm border-0 resize-none focus-visible:ring-0 bg-transparent p-3 leading-6"
-                              placeholder="Enter your schema JSON here..."
-                              style={{ minHeight: '600px' }}
-                            />
-                          </div>
-                        </div>
-                      </div>
+                      <JsonEditor
+                        value={jsonEditorValue}
+                        onChange={handleJsonChange}
+                        error={jsonError}
+                        onAutofix={handleAutofix}
+                        className="flex-1"
+                        placeholder="Enter your schema JSON here..."
+                      />
                       <div className="mt-3 text-xs text-gray-500">
                         <p>Edit the schema JSON directly. Click &quot;Apply Changes&quot; to update the schema.</p>
                         <p>Note: Changes will be validated before applying.</p>
