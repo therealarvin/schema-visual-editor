@@ -143,6 +143,20 @@ function FieldEditor({ item, onUpdate, onDelete, onDuplicate, index, onMove, onM
   useEffect(() => {
     setTempOrder(item.display_attributes.order.toString());
   }, [item.display_attributes.order]);
+
+  // Helper to clean up empty objects in the schema
+  //eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cleanEmptyObjects = (obj: any) => {
+    Object.keys(obj).forEach(key => {
+      if (obj[key] && typeof obj[key] === 'object' && !Array.isArray(obj[key])) {
+        cleanEmptyObjects(obj[key]);
+        if (Object.keys(obj[key]).length === 0) {
+          delete obj[key];
+        }
+      }
+    });
+  };
+
 //eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateField = useCallback((path: string, value: any) => {
     const keys = path.split('.');
@@ -167,20 +181,8 @@ function FieldEditor({ item, onUpdate, onDelete, onDuplicate, index, onMove, onM
     cleanEmptyObjects(updatedItem);
     
     onUpdate(updatedItem);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item, onUpdate]);
-
-  // Helper to clean up empty objects in the schema
-  //eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const cleanEmptyObjects = (obj: any) => {
-    Object.keys(obj).forEach(key => {
-      if (obj[key] && typeof obj[key] === 'object' && !Array.isArray(obj[key])) {
-        cleanEmptyObjects(obj[key]);
-        if (Object.keys(obj[key]).length === 0) {
-          delete obj[key];
-        }
-      }
-    });
-  };
 
   const handleInputTypeChange = useCallback((newType: string) => {
     const updatedItem = JSON.parse(JSON.stringify(item));
@@ -251,6 +253,7 @@ function FieldEditor({ item, onUpdate, onDelete, onDuplicate, index, onMove, onM
     
     cleanEmptyObjects(updatedItem);
     onUpdate(updatedItem);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item, onUpdate]);
 
   const handleRadioOptionsChange = useCallback((value: string) => {

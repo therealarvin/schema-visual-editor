@@ -4,7 +4,6 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
 import { Download, Upload, Eye, Edit3, FileJson, Copy, Save, RotateCcw, Eraser, EyeOff, Maximize2 } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { toast } from 'sonner';
@@ -267,7 +266,7 @@ export default function Home() {
           setJsonHasChanges(false);
           toast.success('Schema updated with auto-fixed JSON!');
         }
-      } catch (e) {
+      } catch {
         // If still has errors, at least we improved it
         toast.info('JSON improved but still has errors. Please review.');
       }

@@ -149,7 +149,7 @@ export function autofixJson(jsonString: string): { fixed: string; changes: strin
     const parsed = JSON.parse(fixed);
     fixed = JSON.stringify(parsed, null, 2);
     changes.push('Reformatted JSON');
-  } catch (e) {
+  } catch {
     // If still invalid, at least we tried
   }
 

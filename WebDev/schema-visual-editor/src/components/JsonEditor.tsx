@@ -125,8 +125,7 @@ export function JsonEditor({
             width: '50px',
             overflowY: 'auto',
             scrollbarWidth: 'none',
-            msOverflowStyle: 'none',
-            WebkitScrollbar: 'none'
+            msOverflowStyle: 'none'
           }}
         >
           <div className="py-3 px-2">
