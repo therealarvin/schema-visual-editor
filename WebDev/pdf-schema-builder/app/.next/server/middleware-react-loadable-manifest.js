@@ -1,1 +1,1 @@
-self.__REACT_LOADABLE_MANIFEST='{"components/PdfViewer.tsx -> react-pdf":{"id":9936,"files":["static/chunks/71e48458.15debd4603e153a9.js","static/chunks/956.2935f7d1ed280739.js"]}}';
+self.__REACT_LOADABLE_MANIFEST='{"components/PdfViewer.tsx -> react-pdf":{"id":9936,"files":["static/chunks/71e48458.18ea38d193f806d5.js","static/chunks/681.a4469a02d50cdd55.js"]},"lib/aiService.ts -> html2canvas":{"id":255,"files":["static/chunks/90d2c0df.2b2363fdbe7e3ad1.js"]}}';

@@ -7,8 +7,8 @@ interface SchemaItemEditorProps {
   item: SchemaItem;
   onSave: (item: SchemaItem) => void;
   onCancel: () => void;
-  onStartLinking?: (checkboxOptionPath: string) => void;
-  linkingMode?: { checkboxOptionPath: string } | null;
+  onStartLinking?: (linkingPath: string, linkingType: 'checkbox' | 'date' | 'text') => void;
+  linkingMode?: { linkingPath: string; linkingType: 'checkbox' | 'date' | 'text' } | null;
 }
 
 export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinking, linkingMode }: SchemaItemEditorProps) {
@@ -229,6 +229,38 @@ export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinkin
           <option value="resolved">Resolved (from database)</option>
           <option value="reserved">Reserved (computed)</option>
         </select>
+        
+        {/* Output type for signatures */}
+        {localItem.display_attributes.input_type === "signature" && (
+          <div style={{ marginTop: "8px" }}>
+            <label style={{ display: "block", fontWeight: "bold", marginBottom: "4px" }}>
+              Signature Output Type:
+            </label>
+            <select
+              value={localItem.display_attributes.value.output || "string"}
+              onChange={(e) => setLocalItem({
+                ...localItem,
+                display_attributes: {
+                  ...localItem.display_attributes,
+                  value: {
+                    ...localItem.display_attributes.value,
+                    output: e.target.value as "string" | "SignatureInput__signer" | "SignatureInput__delegator"
+                  }
+                }
+              })}
+              style={{ 
+                width: "250px", 
+                padding: "8px",
+                border: "1px solid #d1d5db",
+                borderRadius: "4px"
+              }}
+            >
+              <option value="string">String</option>
+              <option value="SignatureInput__signer">Signature Input (Signer)</option>
+              <option value="SignatureInput__delegator">Signature Input (Delegator)</option>
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Value details for resolved type */}
@@ -270,6 +302,102 @@ export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinkin
         </div>
       )}
       
+      {/* Width and Break Before */}
+      <div style={{ display: "flex", gap: "16px", marginBottom: "12px" }}>
+        <div style={{ flex: 1 }}>
+          <label style={{ display: "block", fontWeight: "bold", marginBottom: "4px" }}>
+            Width (Grid units 1-12):
+          </label>
+          <input
+            type="number"
+            min="1"
+            max="12"
+            value={localItem.display_attributes.width || ""}
+            onChange={(e) => setLocalItem({
+              ...localItem,
+              display_attributes: {
+                ...localItem.display_attributes,
+                width: parseInt(e.target.value) || undefined
+              }
+            })}
+            placeholder="12"
+            style={{ 
+              width: "100%", 
+              padding: "8px",
+              border: "1px solid #d1d5db",
+              borderRadius: "4px"
+            }}
+          />
+        </div>
+        <div style={{ flex: 1, display: "flex", alignItems: "center" }}>
+          <label>
+            <input
+              type="checkbox"
+              checked={localItem.display_attributes.breakBefore || false}
+              onChange={(e) => setLocalItem({
+                ...localItem,
+                display_attributes: {
+                  ...localItem.display_attributes,
+                  breakBefore: e.target.checked
+                }
+              })}
+            /> Break before this field (new line)
+          </label>
+        </div>
+      </div>
+
+      {/* Description field */}
+      <div style={{ marginBottom: "12px" }}>
+        <label style={{ display: "block", fontWeight: "bold", marginBottom: "4px" }}>
+          Description:
+        </label>
+        <textarea
+          value={localItem.display_attributes.description || ""}
+          onChange={(e) => setLocalItem({
+            ...localItem,
+            display_attributes: {
+              ...localItem.display_attributes,
+              description: e.target.value
+            }
+          })}
+          placeholder="Optional description for this field"
+          style={{ 
+            width: "100%", 
+            minHeight: "60px",
+            padding: "8px",
+            border: "1px solid #d1d5db",
+            borderRadius: "4px"
+          }}
+        />
+      </div>
+
+      {/* Placeholder field for text inputs */}
+      {(localItem.display_attributes.input_type === "text" || localItem.display_attributes.input_type === "text-area") && (
+        <div style={{ marginBottom: "12px" }}>
+          <label style={{ display: "block", fontWeight: "bold", marginBottom: "4px" }}>
+            Placeholder:
+          </label>
+          <input
+            type="text"
+            value={localItem.display_attributes.placeholder || ""}
+            onChange={(e) => setLocalItem({
+              ...localItem,
+              display_attributes: {
+                ...localItem.display_attributes,
+                placeholder: e.target.value
+              }
+            })}
+            placeholder="Placeholder text for the input field"
+            style={{ 
+              width: "100%", 
+              padding: "8px",
+              border: "1px solid #d1d5db",
+              borderRadius: "4px"
+            }}
+          />
+        </div>
+      )}
+
       {/* Value details for reserved type */}
       {localItem.display_attributes.value.type === "reserved" && (
         <div style={{ marginBottom: "12px", paddingLeft: "20px" }}>
@@ -307,6 +435,168 @@ export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinkin
         </div>
       )}
 
+      {/* Block and Block Style */}
+      <details style={{ marginBottom: "12px" }}>
+        <summary style={{ cursor: "pointer", fontWeight: "bold" }}>
+          Block Configuration
+        </summary>
+        <div style={{ marginTop: "8px", paddingLeft: "16px" }}>
+          <div style={{ marginBottom: "8px" }}>
+            <label style={{ display: "block", fontWeight: "bold", marginBottom: "4px" }}>
+              Block Label:
+            </label>
+            <input
+              type="text"
+              value={localItem.display_attributes.block || ""}
+              onChange={(e) => setLocalItem({
+                ...localItem,
+                display_attributes: {
+                  ...localItem.display_attributes,
+                  block: e.target.value
+                }
+              })}
+              placeholder="Optional grouping label"
+              style={{ 
+                width: "100%", 
+                padding: "8px",
+                border: "1px solid #d1d5db",
+                borderRadius: "4px"
+              }}
+            />
+          </div>
+          
+          {localItem.display_attributes.block && (
+            <>
+              <div style={{ marginBottom: "8px" }}>
+                <label style={{ display: "block", fontWeight: "bold", marginBottom: "4px" }}>
+                  Block Title:
+                </label>
+                <input
+                  type="text"
+                  value={localItem.display_attributes.block_style?.title || ""}
+                  onChange={(e) => setLocalItem({
+                    ...localItem,
+                    display_attributes: {
+                      ...localItem.display_attributes,
+                      block_style: {
+                        ...localItem.display_attributes.block_style,
+                        title: e.target.value
+                      }
+                    }
+                  })}
+                  placeholder="Block title"
+                  style={{ 
+                    width: "100%", 
+                    padding: "8px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "4px"
+                  }}
+                />
+              </div>
+              
+              <div style={{ marginBottom: "8px" }}>
+                <label style={{ display: "block", fontWeight: "bold", marginBottom: "4px" }}>
+                  Block Description:
+                </label>
+                <input
+                  type="text"
+                  value={localItem.display_attributes.block_style?.description || ""}
+                  onChange={(e) => setLocalItem({
+                    ...localItem,
+                    display_attributes: {
+                      ...localItem.display_attributes,
+                      block_style: {
+                        ...localItem.display_attributes.block_style,
+                        description: e.target.value
+                      }
+                    }
+                  })}
+                  placeholder="Block description"
+                  style={{ 
+                    width: "100%", 
+                    padding: "8px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "4px"
+                  }}
+                />
+              </div>
+              
+              <div style={{ marginBottom: "8px" }}>
+                <label style={{ display: "block", fontWeight: "bold", marginBottom: "4px" }}>
+                  Color Theme:
+                </label>
+                <select
+                  value={localItem.display_attributes.block_style?.color_theme || ""}
+                  onChange={(e) => setLocalItem({
+                    ...localItem,
+                    display_attributes: {
+                      ...localItem.display_attributes,
+                      block_style: {
+                        ...localItem.display_attributes.block_style,
+                        color_theme: e.target.value as "blue" | "green" | "purple" | "orange" | "gray"
+                      }
+                    }
+                  })}
+                  style={{ 
+                    width: "150px", 
+                    padding: "8px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "4px"
+                  }}
+                >
+                  <option value="">Select theme</option>
+                  <option value="blue">Blue</option>
+                  <option value="green">Green</option>
+                  <option value="purple">Purple</option>
+                  <option value="orange">Orange</option>
+                  <option value="gray">Gray</option>
+                </select>
+              </div>
+            </>
+          )}
+        </div>
+      </details>
+
+      {/* Attribute Configuration */}
+      <details style={{ marginBottom: "12px" }}>
+        <summary style={{ cursor: "pointer", fontWeight: "bold" }}>
+          Attribute Configuration
+        </summary>
+        <div style={{ marginTop: "8px", paddingLeft: "16px" }}>
+          <div style={{ marginBottom: "8px" }}>
+            <label style={{ display: "block", fontWeight: "bold", marginBottom: "4px" }}>
+              Attribute Key:
+            </label>
+            <input
+              type="text"
+              value={localItem.display_attributes.attribute?.key || ""}
+              onChange={(e) => setLocalItem({
+                ...localItem,
+                display_attributes: {
+                  ...localItem.display_attributes,
+                  attribute: {
+                    ...localItem.display_attributes.attribute,
+                    key: e.target.value,
+                    operation: localItem.display_attributes.attribute?.operation || ((value) => value),
+                    reverseOperation: localItem.display_attributes.attribute?.reverseOperation
+                  }
+                }
+              })}
+              placeholder="e.g., address, phone, email"
+              style={{ 
+                width: "100%", 
+                padding: "8px",
+                border: "1px solid #d1d5db",
+                borderRadius: "4px"
+              }}
+            />
+          </div>
+          <div style={{ fontSize: "12px", color: "#666" }}>
+            Semantic tag for this field (used for smart field mapping)
+          </div>
+        </div>
+      </details>
+
       {/* Checkbox Options */}
       {localItem.display_attributes.input_type === "checkbox" && (
         <details style={{ marginBottom: "12px" }} open>
@@ -314,6 +604,57 @@ export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinkin
             Checkbox Options
           </summary>
           <div style={{ marginTop: "8px", paddingLeft: "16px" }}>
+            {/* Min/Max Selected */}
+            <div style={{ display: "flex", gap: "16px", marginBottom: "12px" }}>
+              <div>
+                <label style={{ display: "block", fontWeight: "bold", marginBottom: "4px" }}>
+                  Min Selected:
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={localItem.display_attributes.checkbox_options?.minSelected || ""}
+                  onChange={(e) => {
+                    const newItem = { ...localItem };
+                    if (!newItem.display_attributes.checkbox_options) {
+                      newItem.display_attributes.checkbox_options = { options: [] };
+                    }
+                    newItem.display_attributes.checkbox_options.minSelected = parseInt(e.target.value) || undefined;
+                    setLocalItem(newItem);
+                  }}
+                  style={{ 
+                    width: "80px", 
+                    padding: "4px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "4px"
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontWeight: "bold", marginBottom: "4px" }}>
+                  Max Selected:
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={localItem.display_attributes.checkbox_options?.maxSelected || ""}
+                  onChange={(e) => {
+                    const newItem = { ...localItem };
+                    if (!newItem.display_attributes.checkbox_options) {
+                      newItem.display_attributes.checkbox_options = { options: [] };
+                    }
+                    newItem.display_attributes.checkbox_options.maxSelected = parseInt(e.target.value) || undefined;
+                    setLocalItem(newItem);
+                  }}
+                  style={{ 
+                    width: "80px", 
+                    padding: "4px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "4px"
+                  }}
+                />
+              </div>
+            </div>
             {localItem.display_attributes.checkbox_options?.options.map((option, index) => (
               <div key={index} style={{ 
                 border: "1px solid #d1d5db", 
@@ -414,26 +755,26 @@ export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinkin
                     <button
                       onClick={() => {
                         onSave(localItem); // Save current state first
-                        onStartLinking(`${localItem.unique_id}.${index}`);
+                        onStartLinking(`${localItem.unique_id}.${index}`, 'checkbox');
                       }}
-                      disabled={linkingMode?.checkboxOptionPath === `${localItem.unique_id}.${index}`}
+                      disabled={linkingMode?.linkingPath === `${localItem.unique_id}.${index}` && linkingMode?.linkingType === 'checkbox'}
                       style={{ 
                         marginTop: "8px",
                         padding: "4px 8px",
-                        background: linkingMode?.checkboxOptionPath === `${localItem.unique_id}.${index}` 
+                        background: (linkingMode?.linkingPath === `${localItem.unique_id}.${index}` && linkingMode?.linkingType === 'checkbox')
                           ? "#fbbf24" 
                           : "#3b82f6",
                         color: "white",
                         border: "none",
                         borderRadius: "4px",
-                        cursor: linkingMode?.checkboxOptionPath === `${localItem.unique_id}.${index}` 
+                        cursor: (linkingMode?.linkingPath === `${localItem.unique_id}.${index}` && linkingMode?.linkingType === 'checkbox')
                           ? "not-allowed" 
                           : "pointer",
                         fontSize: "12px"
                       }}
                     >
-                      {linkingMode?.checkboxOptionPath === `${localItem.unique_id}.${index}` 
-                        ? "🔗 Linking Active - Click a field in PDF" 
+                      {(linkingMode?.linkingPath === `${localItem.unique_id}.${index}` && linkingMode?.linkingType === 'checkbox')
+                        ? "🔗 Linking Active - Click a grouped field in PDF" 
                         : "Add Linked Field"}
                     </button>
                   )}
@@ -545,43 +886,63 @@ export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinkin
                 )}
               </div>
 
-              {/* Linked Text Fields */}
-              {pdfAttr.linked_form_fields_text && (
-                <div style={{ marginBottom: "8px" }}>
-                  <label style={{ fontWeight: "bold" }}>Linked Text Fields:</label>
-                  {pdfAttr.linked_form_fields_text.map((field, fieldIndex) => (
-                    <div key={fieldIndex} style={{ marginTop: "4px" }}>
-                      <input
-                        type="text"
-                        value={field}
-                        onChange={(e) => updateLinkedTextField(pdfIndex, fieldIndex, e.target.value)}
-                        style={{ 
-                          width: "70%",
-                          padding: "4px",
-                          border: "1px solid #d1d5db",
-                          borderRadius: "4px"
-                        }}
-                      />
-                      <button
-                        onClick={() => removeLinkedTextField(pdfIndex, fieldIndex)}
-                        style={{ 
-                          marginLeft: "8px",
-                          padding: "4px 8px",
-                          background: "#ef4444",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "4px",
-                          cursor: "pointer"
-                        }}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
+              {/* Linked Text Fields - Continuation */}
+              <div style={{ marginBottom: "8px" }}>
+                <label style={{ fontWeight: "bold" }}>Text Continuation Fields:</label>
+                <div style={{ fontSize: "12px", color: "#666", marginBottom: "4px" }}>
+                  For multi-box text fields (left-to-right continuation)
+                </div>
+                {pdfAttr.linked_form_fields_text && pdfAttr.linked_form_fields_text.length > 0 ? (
+                  <>
+                    {pdfAttr.linked_form_fields_text.map((field, fieldIndex) => (
+                      <div key={fieldIndex} style={{ marginTop: "4px" }}>
+                        <input
+                          type="text"
+                          value={field}
+                          onChange={(e) => updateLinkedTextField(pdfIndex, fieldIndex, e.target.value)}
+                          style={{ 
+                            width: "70%",
+                            padding: "4px",
+                            border: "1px solid #d1d5db",
+                            borderRadius: "4px"
+                          }}
+                        />
+                        <button
+                          onClick={() => removeLinkedTextField(pdfIndex, fieldIndex)}
+                          style={{ 
+                            marginLeft: "8px",
+                            padding: "4px 8px",
+                            background: "#ef4444",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "4px",
+                            cursor: "pointer"
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </>
+                ) : (
+                  <div style={{ fontSize: "12px", color: "#666", marginTop: "4px" }}>
+                    No continuation fields. The primary field ({pdfAttr.formfield}) will be included automatically.
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
                   <button
-                    onClick={() => addLinkedTextField(pdfIndex)}
+                    onClick={() => {
+                      const newItem = { ...localItem };
+                      if (!newItem.pdf_attributes?.[pdfIndex]) return;
+                      if (!newItem.pdf_attributes[pdfIndex].linked_form_fields_text) {
+                        // Initialize with the primary field if not already there
+                        const primaryField = typeof pdfAttr.formfield === 'string' ? pdfAttr.formfield : '';
+                        newItem.pdf_attributes[pdfIndex].linked_form_fields_text = primaryField ? [primaryField] : [];
+                      }
+                      newItem.pdf_attributes[pdfIndex].linked_form_fields_text!.push("");
+                      setLocalItem(newItem);
+                    }}
                     style={{ 
-                      marginTop: "4px",
                       padding: "4px 8px",
                       background: "#10b981",
                       color: "white",
@@ -590,10 +951,42 @@ export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinkin
                       cursor: "pointer"
                     }}
                   >
-                    Add Linked Field
+                    Add Continuation Field (Manual)
                   </button>
+                  {onStartLinking && (
+                    <button
+                      onClick={() => {
+                        // Initialize array with primary field if needed
+                        const newItem = { ...localItem };
+                        if (!newItem.pdf_attributes?.[pdfIndex]) return;
+                        if (!newItem.pdf_attributes[pdfIndex].linked_form_fields_text) {
+                          const primaryField = typeof pdfAttr.formfield === 'string' ? pdfAttr.formfield : '';
+                          newItem.pdf_attributes[pdfIndex].linked_form_fields_text = primaryField ? [primaryField] : [];
+                        }
+                        onSave(newItem); // Save with initialized array
+                        onStartLinking(`${localItem.unique_id}.pdf.${pdfIndex}.text`, 'text');
+                      }}
+                      disabled={linkingMode?.linkingPath === `${localItem.unique_id}.pdf.${pdfIndex}.text` && linkingMode?.linkingType === 'text'}
+                      style={{ 
+                        padding: "4px 8px",
+                        background: (linkingMode?.linkingPath === `${localItem.unique_id}.pdf.${pdfIndex}.text` && linkingMode?.linkingType === 'text')
+                          ? "#fbbf24" 
+                          : "#3b82f6",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: (linkingMode?.linkingPath === `${localItem.unique_id}.pdf.${pdfIndex}.text` && linkingMode?.linkingType === 'text')
+                          ? "not-allowed" 
+                          : "pointer"
+                      }}
+                    >
+                      {(linkingMode?.linkingPath === `${localItem.unique_id}.pdf.${pdfIndex}.text` && linkingMode?.linkingType === 'text')
+                        ? "🔗 Linking Active - Click any field in PDF" 
+                        : "Add by Clicking PDF"}
+                    </button>
+                  )}
                 </div>
-              )}
+              </div>
 
               {/* Linked Checkbox Fields */}
               {pdfAttr.linked_form_fields_checkbox && (
@@ -614,6 +1007,105 @@ export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinkin
                   </div>
                 </div>
               )}
+              
+              {/* Linked Dates */}
+              <div style={{ marginBottom: "8px" }}>
+                <label style={{ fontWeight: "bold" }}>Linked Date Fields:</label>
+                {pdfAttr.linked_dates?.map((dateField, dateIndex) => (
+                  <div key={dateIndex} style={{ marginTop: "4px" }}>
+                    <input
+                      type="text"
+                      value={dateField.dateFieldName}
+                      onChange={(e) => {
+                        const newItem = { ...localItem };
+                        if (newItem.pdf_attributes?.[pdfIndex]?.linked_dates) {
+                          newItem.pdf_attributes[pdfIndex].linked_dates![dateIndex] = {
+                            dateFieldName: e.target.value
+                          };
+                          setLocalItem(newItem);
+                        }
+                      }}
+                      placeholder="Date field name"
+                      style={{ 
+                        width: "70%",
+                        padding: "4px",
+                        border: "1px solid #d1d5db",
+                        borderRadius: "4px"
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        const newItem = { ...localItem };
+                        if (newItem.pdf_attributes?.[pdfIndex]?.linked_dates) {
+                          newItem.pdf_attributes[pdfIndex].linked_dates!.splice(dateIndex, 1);
+                          setLocalItem(newItem);
+                        }
+                      }}
+                      style={{ 
+                        marginLeft: "8px",
+                        padding: "4px 8px",
+                        background: "#ef4444",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: "pointer"
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+                  <button
+                    onClick={() => {
+                      const newItem = { ...localItem };
+                      if (!newItem.pdf_attributes?.[pdfIndex]) return;
+                      if (!newItem.pdf_attributes[pdfIndex].linked_dates) {
+                        newItem.pdf_attributes[pdfIndex].linked_dates = [];
+                      }
+                      newItem.pdf_attributes[pdfIndex].linked_dates!.push({
+                        dateFieldName: ""
+                      });
+                      setLocalItem(newItem);
+                    }}
+                    style={{ 
+                      padding: "4px 8px",
+                      background: "#10b981",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "4px",
+                      cursor: "pointer"
+                    }}
+                  >
+                    Add Linked Date (Manual)
+                  </button>
+                  {onStartLinking && (
+                    <button
+                      onClick={() => {
+                        onSave(localItem); // Save current state first
+                        onStartLinking(`${localItem.unique_id}.pdf.${pdfIndex}.date`, 'date');
+                      }}
+                      disabled={linkingMode?.linkingPath === `${localItem.unique_id}.pdf.${pdfIndex}.date` && linkingMode?.linkingType === 'date'}
+                      style={{ 
+                        padding: "4px 8px",
+                        background: (linkingMode?.linkingPath === `${localItem.unique_id}.pdf.${pdfIndex}.date` && linkingMode?.linkingType === 'date')
+                          ? "#fbbf24" 
+                          : "#3b82f6",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: (linkingMode?.linkingPath === `${localItem.unique_id}.pdf.${pdfIndex}.date` && linkingMode?.linkingType === 'date')
+                          ? "not-allowed" 
+                          : "pointer"
+                      }}
+                    >
+                      {(linkingMode?.linkingPath === `${localItem.unique_id}.pdf.${pdfIndex}.date` && linkingMode?.linkingType === 'date')
+                        ? "🔗 Linking Active - Click a grouped field in PDF" 
+                        : "Add by Clicking PDF"}
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           ))}
           
@@ -637,6 +1129,561 @@ export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinkin
               Add PDF Attribute
             </button>
           )}
+        </div>
+      </details>
+
+      {/* Conditional Visibility (visibleIf) */}
+      <details style={{ marginBottom: "12px" }}>
+        <summary style={{ cursor: "pointer", fontWeight: "bold" }}>
+          Conditional Visibility
+        </summary>
+        <div style={{ marginTop: "8px", paddingLeft: "16px" }}>
+          <div style={{ fontSize: "12px", color: "#666", marginBottom: "8px" }}>
+            Show this field only when conditions are met
+          </div>
+          <textarea
+            value={JSON.stringify(localItem.display_attributes.visibleIf || [], null, 2)}
+            onChange={(e) => {
+              try {
+                const parsed = JSON.parse(e.target.value);
+                setLocalItem({
+                  ...localItem,
+                  display_attributes: {
+                    ...localItem.display_attributes,
+                    visibleIf: parsed
+                  }
+                });
+              } catch {
+                // Invalid JSON, don't update
+              }
+            }}
+            placeholder='[{"unique_id": "field_id", "operation": "==", "valueChecked": "value"}]'
+            style={{ 
+              width: "100%", 
+              minHeight: "80px",
+              padding: "8px",
+              border: "1px solid #d1d5db",
+              borderRadius: "4px",
+              fontFamily: "monospace",
+              fontSize: "12px"
+            }}
+          />
+        </div>
+      </details>
+
+      {/* Validation Rules */}
+      <details style={{ marginBottom: "12px" }}>
+        <summary style={{ cursor: "pointer", fontWeight: "bold" }}>
+          Validation Rules
+        </summary>
+        <div style={{ marginTop: "8px", paddingLeft: "16px" }}>
+          <div style={{ marginBottom: "12px" }}>
+            <label style={{ display: "block", fontWeight: "bold", marginBottom: "4px" }}>
+              Loopback Validation (Regex):
+            </label>
+            <textarea
+              value={JSON.stringify(localItem.display_attributes.validation?.loopback || [], null, 2)}
+              onChange={(e) => {
+                try {
+                  const parsed = JSON.parse(e.target.value);
+                  setLocalItem({
+                    ...localItem,
+                    display_attributes: {
+                      ...localItem.display_attributes,
+                      validation: {
+                        ...localItem.display_attributes.validation,
+                        loopback: parsed
+                      }
+                    }
+                  });
+                } catch {
+                  // Invalid JSON, don't update
+                }
+              }}
+              placeholder='[{"regex": "^[0-9]+$", "message": "Must be a number"}]'
+              style={{ 
+                width: "100%", 
+                minHeight: "60px",
+                padding: "8px",
+                border: "1px solid #d1d5db",
+                borderRadius: "4px",
+                fontFamily: "monospace",
+                fontSize: "12px"
+              }}
+            />
+          </div>
+          
+          <div style={{ marginBottom: "12px" }}>
+            <label style={{ display: "block", fontWeight: "bold", marginBottom: "4px" }}>
+              Cross-Field Validation:
+            </label>
+            <textarea
+              value={JSON.stringify(localItem.display_attributes.validation?.crossField || [], null, 2)}
+              onChange={(e) => {
+                try {
+                  const parsed = JSON.parse(e.target.value);
+                  setLocalItem({
+                    ...localItem,
+                    display_attributes: {
+                      ...localItem.display_attributes,
+                      validation: {
+                        ...localItem.display_attributes.validation,
+                        crossField: parsed
+                      }
+                    }
+                  });
+                } catch {
+                  // Invalid JSON, don't update
+                }
+              }}
+              placeholder='[{"rule": ">", "unique_id": "other_field", "message": "Must be greater than other field"}]'
+              style={{ 
+                width: "100%", 
+                minHeight: "60px",
+                padding: "8px",
+                border: "1px solid #d1d5db",
+                borderRadius: "4px",
+                fontFamily: "monospace",
+                fontSize: "12px"
+              }}
+            />
+          </div>
+        </div>
+      </details>
+
+      {/* Special Input Configuration */}
+      <details style={{ marginBottom: "12px" }}>
+        <summary style={{ cursor: "pointer", fontWeight: "bold" }}>
+          Special Input Configuration
+        </summary>
+        <div style={{ marginTop: "8px", paddingLeft: "16px" }}>
+          
+          {/* Text special input options */}
+          {localItem.display_attributes.input_type === "text" && (
+            <div style={{ marginBottom: "12px" }}>
+              <h5 style={{ fontWeight: "bold", marginBottom: "8px" }}>Text Field Type:</h5>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={localItem.display_attributes.special_input?.text?.percentage || false}
+                    onChange={(e) => setLocalItem({
+                      ...localItem,
+                      display_attributes: {
+                        ...localItem.display_attributes,
+                        special_input: {
+                          ...localItem.display_attributes.special_input,
+                          text: {
+                            ...localItem.display_attributes.special_input?.text,
+                            percentage: e.target.checked
+                          }
+                        }
+                      }
+                    })}
+                  /> Percentage
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={localItem.display_attributes.special_input?.text?.phone || false}
+                    onChange={(e) => setLocalItem({
+                      ...localItem,
+                      display_attributes: {
+                        ...localItem.display_attributes,
+                        special_input: {
+                          ...localItem.display_attributes.special_input,
+                          text: {
+                            ...localItem.display_attributes.special_input?.text,
+                            phone: e.target.checked
+                          }
+                        }
+                      }
+                    })}
+                  /> Phone Number
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={localItem.display_attributes.special_input?.text?.date || false}
+                    onChange={(e) => setLocalItem({
+                      ...localItem,
+                      display_attributes: {
+                        ...localItem.display_attributes,
+                        special_input: {
+                          ...localItem.display_attributes.special_input,
+                          text: {
+                            ...localItem.display_attributes.special_input?.text,
+                            date: e.target.checked
+                          }
+                        }
+                      }
+                    })}
+                  /> Date (January 1, 2025)
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={localItem.display_attributes.special_input?.text?.numbered_date || false}
+                    onChange={(e) => setLocalItem({
+                      ...localItem,
+                      display_attributes: {
+                        ...localItem.display_attributes,
+                        special_input: {
+                          ...localItem.display_attributes.special_input,
+                          text: {
+                            ...localItem.display_attributes.special_input?.text,
+                            numbered_date: e.target.checked
+                          }
+                        }
+                      }
+                    })}
+                  /> Numbered Date (01/01/2025)
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={localItem.display_attributes.special_input?.text?.month_year || false}
+                    onChange={(e) => setLocalItem({
+                      ...localItem,
+                      display_attributes: {
+                        ...localItem.display_attributes,
+                        special_input: {
+                          ...localItem.display_attributes.special_input,
+                          text: {
+                            ...localItem.display_attributes.special_input?.text,
+                            month_year: e.target.checked
+                          }
+                        }
+                      }
+                    })}
+                  /> Month/Year
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={localItem.display_attributes.special_input?.text?.currency || false}
+                    onChange={(e) => setLocalItem({
+                      ...localItem,
+                      display_attributes: {
+                        ...localItem.display_attributes,
+                        special_input: {
+                          ...localItem.display_attributes.special_input,
+                          text: {
+                            ...localItem.display_attributes.special_input?.text,
+                            currency: e.target.checked
+                          }
+                        }
+                      }
+                    })}
+                  /> Currency
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={localItem.display_attributes.special_input?.text?.number || false}
+                    onChange={(e) => setLocalItem({
+                      ...localItem,
+                      display_attributes: {
+                        ...localItem.display_attributes,
+                        special_input: {
+                          ...localItem.display_attributes.special_input,
+                          text: {
+                            ...localItem.display_attributes.special_input?.text,
+                            number: e.target.checked
+                          }
+                        }
+                      }
+                    })}
+                  /> Number Only
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={localItem.display_attributes.special_input?.text?.email || false}
+                    onChange={(e) => setLocalItem({
+                      ...localItem,
+                      display_attributes: {
+                        ...localItem.display_attributes,
+                        special_input: {
+                          ...localItem.display_attributes.special_input,
+                          text: {
+                            ...localItem.display_attributes.special_input?.text,
+                            email: e.target.checked
+                          }
+                        }
+                      }
+                    })}
+                  /> Email
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={localItem.display_attributes.special_input?.text?.url || false}
+                    onChange={(e) => setLocalItem({
+                      ...localItem,
+                      display_attributes: {
+                        ...localItem.display_attributes,
+                        special_input: {
+                          ...localItem.display_attributes.special_input,
+                          text: {
+                            ...localItem.display_attributes.special_input?.text,
+                            url: e.target.checked
+                          }
+                        }
+                      }
+                    })}
+                  /> URL
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* Checkbox special input options */}
+          {localItem.display_attributes.input_type === "checkbox" && (
+            <div style={{ marginBottom: "12px" }}>
+              <h5 style={{ fontWeight: "bold", marginBottom: "8px" }}>Checkbox Options:</h5>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={localItem.display_attributes.special_input?.checkbox?.asRadio || false}
+                  onChange={(e) => setLocalItem({
+                    ...localItem,
+                    display_attributes: {
+                      ...localItem.display_attributes,
+                      special_input: {
+                        ...localItem.display_attributes.special_input,
+                        checkbox: {
+                          ...localItem.display_attributes.special_input?.checkbox,
+                          asRadio: e.target.checked
+                        }
+                      }
+                    }
+                  })}
+                /> Display as Radio (single selection)
+              </label>
+              <div style={{ marginTop: "8px" }}>
+                <label style={{ display: "block", marginBottom: "4px" }}>Horizontal columns:</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="6"
+                  value={localItem.display_attributes.special_input?.checkbox?.horizontal || ""}
+                  onChange={(e) => setLocalItem({
+                    ...localItem,
+                    display_attributes: {
+                      ...localItem.display_attributes,
+                      special_input: {
+                        ...localItem.display_attributes.special_input,
+                        checkbox: {
+                          ...localItem.display_attributes.special_input?.checkbox,
+                          horizontal: parseInt(e.target.value) || undefined
+                        }
+                      }
+                    }
+                  })}
+                  placeholder="Number of columns"
+                  style={{ 
+                    width: "100px", 
+                    padding: "4px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "4px"
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Text area special input options */}
+          {localItem.display_attributes.input_type === "text-area" && (
+            <div style={{ marginBottom: "12px" }}>
+              <h5 style={{ fontWeight: "bold", marginBottom: "8px" }}>Text Area Options:</h5>
+              <div style={{ display: "flex", gap: "16px" }}>
+                <div>
+                  <label style={{ display: "block", marginBottom: "4px" }}>Min Rows:</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={localItem.display_attributes.special_input?.textArea?.minRows || ""}
+                    onChange={(e) => setLocalItem({
+                      ...localItem,
+                      display_attributes: {
+                        ...localItem.display_attributes,
+                        special_input: {
+                          ...localItem.display_attributes.special_input,
+                          textArea: {
+                            ...localItem.display_attributes.special_input?.textArea,
+                            minRows: parseInt(e.target.value) || undefined
+                          }
+                        }
+                      }
+                    })}
+                    style={{ 
+                      width: "80px", 
+                      padding: "4px",
+                      border: "1px solid #d1d5db",
+                      borderRadius: "4px"
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", marginBottom: "4px" }}>Max Rows:</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={localItem.display_attributes.special_input?.textArea?.maxRows || ""}
+                    onChange={(e) => setLocalItem({
+                      ...localItem,
+                      display_attributes: {
+                        ...localItem.display_attributes,
+                        special_input: {
+                          ...localItem.display_attributes.special_input,
+                          textArea: {
+                            ...localItem.display_attributes.special_input?.textArea,
+                            maxRows: parseInt(e.target.value) || undefined
+                          }
+                        }
+                      }
+                    })}
+                    style={{ 
+                      width: "80px", 
+                      padding: "4px",
+                      border: "1px solid #d1d5db",
+                      borderRadius: "4px"
+                    }}
+                  />
+                </div>
+              </div>
+              <label style={{ marginTop: "8px", display: "block" }}>
+                <input
+                  type="checkbox"
+                  checked={localItem.display_attributes.special_input?.textArea?.autoResize || false}
+                  onChange={(e) => setLocalItem({
+                    ...localItem,
+                    display_attributes: {
+                      ...localItem.display_attributes,
+                      special_input: {
+                        ...localItem.display_attributes.special_input,
+                        textArea: {
+                          ...localItem.display_attributes.special_input?.textArea,
+                          autoResize: e.target.checked
+                        }
+                      }
+                    }
+                  })}
+                /> Auto-resize based on content
+              </label>
+            </div>
+          )}
+
+          {/* File upload special input options */}
+          {localItem.display_attributes.input_type === "fileUpload" && (
+            <div style={{ marginBottom: "12px" }}>
+              <h5 style={{ fontWeight: "bold", marginBottom: "8px" }}>File Upload Options:</h5>
+              <div style={{ marginBottom: "8px" }}>
+                <label style={{ display: "block", marginBottom: "4px" }}>Accept file types:</label>
+                <input
+                  type="text"
+                  value={localItem.display_attributes.special_input?.fileUpload?.accept || ""}
+                  onChange={(e) => setLocalItem({
+                    ...localItem,
+                    display_attributes: {
+                      ...localItem.display_attributes,
+                      special_input: {
+                        ...localItem.display_attributes.special_input,
+                        fileUpload: {
+                          ...localItem.display_attributes.special_input?.fileUpload,
+                          accept: e.target.value
+                        }
+                      }
+                    }
+                  })}
+                  placeholder="e.g., .pdf,.doc,.docx"
+                  style={{ 
+                    width: "100%", 
+                    padding: "4px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "4px"
+                  }}
+                />
+              </div>
+              <div style={{ display: "flex", gap: "16px", marginBottom: "8px" }}>
+                <div>
+                  <label style={{ display: "block", marginBottom: "4px" }}>Max size (MB):</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={localItem.display_attributes.special_input?.fileUpload?.maxSize || ""}
+                    onChange={(e) => setLocalItem({
+                      ...localItem,
+                      display_attributes: {
+                        ...localItem.display_attributes,
+                        special_input: {
+                          ...localItem.display_attributes.special_input,
+                          fileUpload: {
+                            ...localItem.display_attributes.special_input?.fileUpload,
+                            maxSize: parseInt(e.target.value) || undefined
+                          }
+                        }
+                      }
+                    })}
+                    style={{ 
+                      width: "80px", 
+                      padding: "4px",
+                      border: "1px solid #d1d5db",
+                      borderRadius: "4px"
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", marginBottom: "4px" }}>Max files:</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={localItem.display_attributes.special_input?.fileUpload?.maxFiles || ""}
+                    onChange={(e) => setLocalItem({
+                      ...localItem,
+                      display_attributes: {
+                        ...localItem.display_attributes,
+                        special_input: {
+                          ...localItem.display_attributes.special_input,
+                          fileUpload: {
+                            ...localItem.display_attributes.special_input?.fileUpload,
+                            maxFiles: parseInt(e.target.value) || undefined
+                          }
+                        }
+                      }
+                    })}
+                    style={{ 
+                      width: "80px", 
+                      padding: "4px",
+                      border: "1px solid #d1d5db",
+                      borderRadius: "4px"
+                    }}
+                  />
+                </div>
+              </div>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={localItem.display_attributes.special_input?.fileUpload?.multiple || false}
+                  onChange={(e) => setLocalItem({
+                    ...localItem,
+                    display_attributes: {
+                      ...localItem.display_attributes,
+                      special_input: {
+                        ...localItem.display_attributes.special_input,
+                        fileUpload: {
+                          ...localItem.display_attributes.special_input?.fileUpload,
+                          multiple: e.target.checked
+                        }
+                      }
+                    }
+                  })}
+                /> Allow multiple files
+              </label>
+            </div>
+          )}
+
         </div>
       </details>
 

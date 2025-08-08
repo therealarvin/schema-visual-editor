@@ -12,13 +12,28 @@ export default function SchemaExport({ schema, formType }: SchemaExportProps) {
   const generateTypeScript = (): string => {
     const schemaName = formType.replace(/[^a-zA-Z0-9]/g, "_");
     
-    const schemaString = JSON.stringify(schema, (key, value) => {
+    // Clean up empty arrays and undefined values
+    const cleanedSchema = JSON.parse(JSON.stringify(schema, (key, value) => {
       // Handle function serialization for attribute operations
       if (key === "operation" || key === "reverseOperation") {
         return undefined; // Skip functions in JSON
       }
+      // Remove empty linked_form_fields_text arrays
+      if (key === "linked_form_fields_text" && Array.isArray(value) && value.length === 0) {
+        return undefined;
+      }
+      // Remove empty linked_dates arrays
+      if (key === "linked_dates" && Array.isArray(value) && value.length === 0) {
+        return undefined;
+      }
+      // Remove other empty arrays that shouldn't be in the output
+      if (key === "linkedFields" && Array.isArray(value) && value.length === 0) {
+        return undefined;
+      }
       return value;
-    }, 2);
+    }));
+    
+    const schemaString = JSON.stringify(cleanedSchema, null, 2);
 
     return `import { Schema, SchemaItem } from '@/types/schema';
 
@@ -43,7 +58,24 @@ export default ${schemaName}_schema;`;
   };
 
   const downloadJSON = () => {
-    const blob = new Blob([JSON.stringify(schema, null, 2)], { type: "application/json" });
+    // Clean up empty arrays for JSON download too
+    const cleanedSchema = JSON.parse(JSON.stringify(schema, (key, value) => {
+      // Remove empty linked_form_fields_text arrays
+      if (key === "linked_form_fields_text" && Array.isArray(value) && value.length === 0) {
+        return undefined;
+      }
+      // Remove empty linked_dates arrays
+      if (key === "linked_dates" && Array.isArray(value) && value.length === 0) {
+        return undefined;
+      }
+      // Remove other empty arrays that shouldn't be in the output
+      if (key === "linkedFields" && Array.isArray(value) && value.length === 0) {
+        return undefined;
+      }
+      return value;
+    }));
+    
+    const blob = new Blob([JSON.stringify(cleanedSchema, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

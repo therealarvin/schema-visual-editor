@@ -104,6 +104,7 @@ export interface SchemaItem {
         accept?: string; //file types to accept (e.g., ".pdf,.doc,.docx")
         maxSize?: number; //max file size in MB
         multiple?: boolean; //allow multiple files
+        maxFiles?: number; //max number of files allowed
       };
       textArea?: {
         minRows?: number; //minimum rows to display
@@ -129,4 +130,5 @@ export interface FieldGroup {
   fields: PDFField[];
   groupType: "text-continuation" | "text-same-value" | "checkbox" | "radio";
   displayName?: string;
+  intent?: string;
 }

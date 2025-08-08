@@ -3,29 +3,31 @@
 import React, { useState } from "react";
 import { SchemaItem, Schema, FieldGroup } from "@/types/schema";
 import SchemaItemEditor from "./SchemaItemEditor";
+import { generateFieldAttributes } from "@/lib/aiService";
 
 interface SchemaEditorProps {
   schema: Schema;
   onSchemaChange: (schema: Schema) => void;
   fieldGroup?: FieldGroup;
   formType: string;
-  onStartLinking?: (checkboxOptionPath: string) => void;
-  linkingMode?: { checkboxOptionPath: string } | null;
+  onStartLinking?: (linkingPath: string, linkingType: 'checkbox' | 'date' | 'text') => void;
+  linkingMode?: { linkingPath: string; linkingType: 'checkbox' | 'date' | 'text' } | null;
 }
 
 export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formType, onStartLinking, linkingMode }: SchemaEditorProps) {
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [newItem, setNewItem] = useState<Partial<SchemaItem> | null>(null);
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
 
   // Generate schema item from field group
-  const generateSchemaItem = (group: FieldGroup): SchemaItem => {
+  const generateSchemaItem = async (group: FieldGroup): Promise<SchemaItem> => {
     const firstField = group.fields[0];
     const uniqueId = firstField.name;
 
     const baseItem: SchemaItem = {
       unique_id: uniqueId,
       display_attributes: {
-        display_name: group.displayName || "",
+        display_name: group.displayName || group.intent || "",
         input_type: "text",
         order: schema.length + 1,
         value: {
@@ -40,7 +42,7 @@ export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formT
       baseItem.pdf_attributes = [{
         formType,
         formfield: firstField.name,
-        linked_form_fields_text: group.fields.slice(1).map(f => f.name)
+        linked_form_fields_text: group.fields.map(f => f.name)  // Include all fields, not just slice(1)
       }];
     } else if (group.groupType === "text-same-value") {
       baseItem.display_attributes.input_type = "text";
@@ -78,15 +80,61 @@ export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formT
       }];
     }
 
+    // If intent is provided, use AI to generate better attributes
+    if (group.intent) {
+      try {
+        setIsGeneratingAI(true);
+        
+        // No longer capturing screenshots - using intent-based generation only
+        
+        // Map group type to input type
+        let inputType: SchemaItem['display_attributes']['input_type'] = 'text';
+        if (group.groupType === 'checkbox') inputType = 'checkbox';
+        else if (group.groupType === 'radio') inputType = 'radio';
+        
+        // Generate AI attributes (without screenshot)
+        const aiAttributes = await generateFieldAttributes({
+          intent: group.intent,
+          fieldType: inputType,
+          screenshot: undefined,  // No screenshot
+          pdfContext: group.fields,
+          groupType: group.groupType
+        });
+        
+        // Apply AI-generated attributes
+        baseItem.display_attributes.display_name = aiAttributes.display_name;
+        if (aiAttributes.description) {
+          baseItem.display_attributes.description = aiAttributes.description;
+        }
+        if (aiAttributes.width) {
+          baseItem.display_attributes.width = aiAttributes.width;
+        }
+        if (aiAttributes.placeholder) {
+          baseItem.display_attributes.placeholder = aiAttributes.placeholder;
+        }
+        if (aiAttributes.special_input) {
+          baseItem.display_attributes.special_input = aiAttributes.special_input;
+        }
+      } catch (error) {
+        console.error('AI generation failed:', error);
+        // Fallback to intent as display name
+        baseItem.display_attributes.display_name = group.intent;
+      } finally {
+        setIsGeneratingAI(false);
+      }
+    }
+
     return baseItem;
   };
 
   // Add new schema item from field group
   React.useEffect(() => {
     if (fieldGroup) {
-      const newSchemaItem = generateSchemaItem(fieldGroup);
-      setNewItem(newSchemaItem);
-      setEditingItem(newSchemaItem.unique_id);
+      (async () => {
+        const newSchemaItem = await generateSchemaItem(fieldGroup);
+        setNewItem(newSchemaItem);
+        setEditingItem(newSchemaItem.unique_id);
+      })();
     }
   }, [fieldGroup]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -109,6 +157,33 @@ export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formT
   return (
     <div style={{ height: "100%", overflow: "auto", padding: "20px" }}>
       <h2>Schema Editor</h2>
+      
+      {isGeneratingAI && (
+        <div style={{ 
+          padding: "12px", 
+          background: "#eff6ff", 
+          border: "1px solid #2563eb", 
+          borderRadius: "8px", 
+          marginBottom: "12px" 
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <div style={{ 
+              width: "16px", 
+              height: "16px", 
+              border: "2px solid #2563eb", 
+              borderTopColor: "transparent",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite"
+            }} />
+            <span>AI is generating field attributes using GPT-5 nano...</span>
+          </div>
+          <style jsx>{`
+            @keyframes spin {
+              to { transform: rotate(360deg); }
+            }
+          `}</style>
+        </div>
+      )}
       
       {newItem && editingItem === newItem.unique_id && (
         <div>

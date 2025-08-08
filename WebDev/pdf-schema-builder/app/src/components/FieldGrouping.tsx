@@ -11,7 +11,7 @@ interface FieldGroupingProps {
 
 export default function FieldGrouping({ selectedFields, onCreateGroup, onCancel }: FieldGroupingProps) {
   const [groupType, setGroupType] = useState<FieldGroup["groupType"] | "">("");
-  const [displayName, setDisplayName] = useState("");
+  const [intent, setIntent] = useState("");
 
   // Determine available group types based on selected fields
   const getAvailableGroupTypes = () => {
@@ -40,15 +40,15 @@ export default function FieldGrouping({ selectedFields, onCreateGroup, onCancel 
   const availableTypes = getAvailableGroupTypes();
 
   const handleCreate = () => {
-    if (!groupType || !displayName) {
-      alert("Please select a group type and enter a display name");
+    if (!groupType || !intent) {
+      alert("Please select a group type and describe the field's purpose");
       return;
     }
 
     onCreateGroup({
       fields: selectedFields,
       groupType: groupType as FieldGroup["groupType"],
-      displayName
+      intent
     });
   };
 
@@ -120,20 +120,24 @@ export default function FieldGrouping({ selectedFields, onCreateGroup, onCancel 
 
           <div style={{ marginBottom: "20px" }}>
             <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
-              Display Name:
+              Field Intent:
             </label>
-            <input
-              type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Enter display name for this group"
+            <textarea
+              value={intent}
+              onChange={(e) => setIntent(e.target.value)}
+              placeholder="Describe what this field is for (e.g., 'needs to enter the contractor for the lawn here')"
               style={{ 
                 width: "100%", 
                 padding: "8px",
                 border: "1px solid #d1d5db",
-                borderRadius: "4px"
+                borderRadius: "4px",
+                minHeight: "60px",
+                resize: "vertical"
               }}
             />
+            <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>
+              AI will generate appropriate display name and settings based on your description
+            </div>
           </div>
 
           <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>

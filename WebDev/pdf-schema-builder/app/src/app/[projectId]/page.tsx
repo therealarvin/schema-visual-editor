@@ -9,6 +9,7 @@ import { PDFField, Schema, FieldGroup } from "@/types/schema";
 import FieldGrouping from "@/components/FieldGrouping";
 import SchemaEditor from "@/components/SchemaEditor";
 import SchemaExport from "@/components/SchemaExport";
+import AILogsViewer from "@/components/AILogsViewer";
 import { saveSchemaToIndexedDB, loadSchemaFromIndexedDB } from "@/lib/schemaStorage";
 
 const MAX_BYTES = 20_971_520; // 20 MB
@@ -43,7 +44,7 @@ export default function ProjectPage() {
   const [showGrouping, setShowGrouping] = useState(false);
   const [currentFieldGroup, setCurrentFieldGroup] = useState<FieldGroup | undefined>();
   const [activeTab, setActiveTab] = useState<"editor" | "typescript">("editor");
-  const [linkingMode, setLinkingMode] = useState<{ checkboxOptionPath: string } | null>(null);
+  const [linkingMode, setLinkingMode] = useState<{ linkingPath: string; linkingType: 'checkbox' | 'date' | 'text' } | null>(null);
 
   // Load PDF and schema on mount
   useEffect(() => {
@@ -118,47 +119,116 @@ export default function ProjectPage() {
   const handleFieldClick = (field: PDFField) => {
     // If in linking mode, handle linking instead of selection
     if (linkingMode) {
-      // Find the schema item that contains this field
-      const linkedSchemaItem = schema.find(item => 
-        item.pdf_attributes?.some(attr => 
-          attr.formfield === field.name ||
-          (Array.isArray(attr.formfield) && attr.formfield.includes(field.name)) ||
-          attr.linked_form_fields_text?.includes(field.name)
-        )
-      );
+      const { linkingPath, linkingType } = linkingMode;
       
-      if (linkedSchemaItem) {
-        // Add the linked field to the checkbox option
-        const [schemaId, optionIndex] = linkingMode.checkboxOptionPath.split('.');
-        const updatedSchema = schema.map(item => {
-          if (item.unique_id === schemaId && item.display_attributes.checkbox_options) {
-            const options = [...item.display_attributes.checkbox_options.options];
-            if (options[parseInt(optionIndex)]) {
-              if (!options[parseInt(optionIndex)].linkedFields) {
-                options[parseInt(optionIndex)].linkedFields = [];
-              }
-              if (!options[parseInt(optionIndex)].linkedFields!.includes(linkedSchemaItem.unique_id)) {
-                options[parseInt(optionIndex)].linkedFields!.push(linkedSchemaItem.unique_id);
-              }
-            }
-            return {
-              ...item,
-              display_attributes: {
-                ...item.display_attributes,
-                checkbox_options: {
-                  ...item.display_attributes.checkbox_options,
-                  options
+      if (linkingType === 'checkbox') {
+        // For checkbox linking, require a grouped field
+        const linkedSchemaItem = schema.find(item => 
+          item.pdf_attributes?.some(attr => 
+            attr.formfield === field.name ||
+            (Array.isArray(attr.formfield) && attr.formfield.includes(field.name)) ||
+            attr.linked_form_fields_text?.includes(field.name)
+          )
+        );
+        
+        if (linkedSchemaItem) {
+          const [schemaId, optionIndex] = linkingPath.split('.');
+          const updatedSchema = schema.map(item => {
+            if (item.unique_id === schemaId && item.display_attributes.checkbox_options) {
+              const options = [...item.display_attributes.checkbox_options.options];
+              if (options[parseInt(optionIndex)]) {
+                if (!options[parseInt(optionIndex)].linkedFields) {
+                  options[parseInt(optionIndex)].linkedFields = [];
+                }
+                if (!options[parseInt(optionIndex)].linkedFields!.includes(linkedSchemaItem.unique_id)) {
+                  options[parseInt(optionIndex)].linkedFields!.push(linkedSchemaItem.unique_id);
                 }
               }
+              return {
+                ...item,
+                display_attributes: {
+                  ...item.display_attributes,
+                  checkbox_options: {
+                    ...item.display_attributes.checkbox_options,
+                    options
+                  }
+                }
+              };
+            }
+            return item;
+          });
+          setSchema(updatedSchema);
+          setLinkingMode(null);
+          alert(`Linked checkbox option to ${linkedSchemaItem.display_attributes.display_name || linkedSchemaItem.unique_id}`);
+        } else {
+          alert('For checkbox linking, you must click on a grouped field. Please create a group first.');
+        }
+      } else if (linkingType === 'date') {
+        // For date linking, require a grouped field
+        const linkedSchemaItem = schema.find(item => 
+          item.pdf_attributes?.some(attr => 
+            attr.formfield === field.name ||
+            (Array.isArray(attr.formfield) && attr.formfield.includes(field.name)) ||
+            attr.linked_form_fields_text?.includes(field.name)
+          )
+        );
+        
+        if (linkedSchemaItem) {
+          const pathParts = linkingPath.split('.');
+          const schemaId = pathParts[0];
+          const pdfIndex = parseInt(pathParts[2]);
+          
+          const updatedSchema = schema.map(item => {
+            if (item.unique_id === schemaId && item.pdf_attributes?.[pdfIndex]) {
+              const updatedPdfAttrs = [...(item.pdf_attributes || [])];
+              if (!updatedPdfAttrs[pdfIndex].linked_dates) {
+                updatedPdfAttrs[pdfIndex].linked_dates = [];
+              }
+              // Use the unique_id of the grouped field as the date field name
+              updatedPdfAttrs[pdfIndex].linked_dates!.push({
+                dateFieldName: linkedSchemaItem.unique_id
+              });
+              
+              return {
+                ...item,
+                pdf_attributes: updatedPdfAttrs
+              };
+            }
+            return item;
+          });
+          setSchema(updatedSchema);
+          setLinkingMode(null);
+          alert(`Added date field: ${linkedSchemaItem.display_attributes.display_name || linkedSchemaItem.unique_id}`);
+        } else {
+          alert('For date linking, you must click on a grouped field. Please create a group first.');
+        }
+      } else if (linkingType === 'text') {
+        // For text linking, allow any field (grouped or not)
+        const pathParts = linkingPath.split('.');
+        const schemaId = pathParts[0];
+        const pdfIndex = parseInt(pathParts[2]);
+        
+        const updatedSchema = schema.map(item => {
+          if (item.unique_id === schemaId && item.pdf_attributes?.[pdfIndex]) {
+            const updatedPdfAttrs = [...(item.pdf_attributes || [])];
+            if (!updatedPdfAttrs[pdfIndex].linked_form_fields_text) {
+              updatedPdfAttrs[pdfIndex].linked_form_fields_text = [];
+            }
+            // Add the field name directly
+            if (!updatedPdfAttrs[pdfIndex].linked_form_fields_text!.includes(field.name)) {
+              updatedPdfAttrs[pdfIndex].linked_form_fields_text!.push(field.name);
+            }
+            
+            return {
+              ...item,
+              pdf_attributes: updatedPdfAttrs
             };
           }
           return item;
         });
         setSchema(updatedSchema);
         setLinkingMode(null);
-        alert(`Linked to ${linkedSchemaItem.display_attributes.display_name || linkedSchemaItem.unique_id}`);
-      } else {
-        alert('This field is not part of any schema group yet. Please create a group first.');
+        alert(`Added linked text field: ${field.name}`);
       }
       return;
     }
@@ -321,7 +391,11 @@ export default function ProjectPage() {
               borderBottom: "1px solid #fbbf24",
               fontSize: "14px"
             }}>
-              🔗 Linking Mode Active: Click on a grouped field in the PDF to link it
+              🔗 Linking Mode Active: {
+                linkingMode.linkingType === 'checkbox' ? 'Click on a grouped field in the PDF to link it to the checkbox option' :
+                linkingMode.linkingType === 'date' ? 'Click on a grouped field in the PDF to add it as a date field' :
+                'Click on any field in the PDF to add it as a linked text field'
+              }
             </div>
           )}
           <PdfViewer
@@ -376,7 +450,8 @@ export default function ProjectPage() {
                 onSchemaChange={setSchema}
                 fieldGroup={currentFieldGroup}
                 formType={formType}
-                onStartLinking={(checkboxOptionPath: string) => setLinkingMode({ checkboxOptionPath })}
+                onStartLinking={(linkingPath: string, linkingType: 'checkbox' | 'date' | 'text') => 
+                  setLinkingMode({ linkingPath, linkingType })}
                 linkingMode={linkingMode}
               />
             ) : (
@@ -394,6 +469,9 @@ export default function ProjectPage() {
           onCancel={() => setShowGrouping(false)}
         />
       )}
+      
+      {/* AI Logs Viewer - only show in development */}
+      {process.env.NODE_ENV === 'development' && <AILogsViewer />}
     </div>
   );
 }

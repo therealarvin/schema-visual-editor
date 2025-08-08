@@ -31,7 +31,6 @@ export default function PdfViewer({ pdfData, onFieldsExtracted, selectedFields, 
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [scale, setScale] = useState<number>(1.0);
   const [pdfFields, setPdfFields] = useState<PDFField[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Set up worker when component mounts
   useEffect(() => {
@@ -39,7 +38,7 @@ export default function PdfViewer({ pdfData, onFieldsExtracted, selectedFields, 
       if (typeof window !== "undefined") {
         const pdfjsLib = await import("react-pdf");
         const { pdfjs } = pdfjsLib;
-        // Use local worker file to avoid CORS issues
+        // Use local worker file
         pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
       }
     };
@@ -47,7 +46,7 @@ export default function PdfViewer({ pdfData, onFieldsExtracted, selectedFields, 
   }, []);
 
   const extractFormFields = useCallback(async () => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !pdfData) return;
     
     try {
       const { pdfjs } = await import("react-pdf");
@@ -98,10 +97,12 @@ export default function PdfViewer({ pdfData, onFieldsExtracted, selectedFields, 
     }
   }, [pdfData, onFieldsExtracted]);
 
+  // Extract form fields when PDF data is available
   useEffect(() => {
-    extractFormFields();
-    setIsLoading(false);
-  }, [extractFormFields]);
+    if (pdfData && pdfData.byteLength > 0) {
+      extractFormFields();
+    }
+  }, [pdfData, extractFormFields]);
 
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);
@@ -112,7 +113,7 @@ export default function PdfViewer({ pdfData, onFieldsExtracted, selectedFields, 
   };
 
   return (
-    <div className="pdf-viewer-container" style={{ position: "relative", height: "100%", overflow: "auto" }}>
+    <div id="pdf-viewer-container" className="pdf-viewer-container" style={{ position: "relative", height: "100%", overflow: "auto" }}>
       <div style={{ padding: "10px", borderBottom: "1px solid #ccc", background: "#f5f5f5" }}>
         <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage <= 1}>
           Previous
@@ -131,13 +132,18 @@ export default function PdfViewer({ pdfData, onFieldsExtracted, selectedFields, 
         </span>
       </div>
 
-      <div style={{ position: "relative", padding: "20px" }}>
-        {isLoading ? (
-          <div style={{ textAlign: "center", padding: "40px" }}>Loading PDF...</div>
-        ) : pdfData ? (
+      <div id="pdf-page-area" style={{ position: "relative", padding: "20px" }}>
+        {!pdfData ? (
+          <div style={{ textAlign: "center", padding: "40px" }}>No PDF data available</div>
+        ) : (
           <Document 
-            file={pdfData.slice(0)} 
+            file={pdfData} 
             onLoadSuccess={onDocumentLoadSuccess}
+            onLoadError={(error) => {
+              console.error('PDF load error:', error);
+            }}
+            loading={<div style={{ textAlign: "center", padding: "40px" }}>Loading PDF document...</div>}
+            error={<div style={{ textAlign: "center", padding: "40px", color: "#ef4444" }}>Failed to load PDF. Please try refreshing the page.</div>}
           >
             <Page
               pageNumber={currentPage}
@@ -146,8 +152,6 @@ export default function PdfViewer({ pdfData, onFieldsExtracted, selectedFields, 
               renderTextLayer={false}
             />
           </Document>
-        ) : (
-          <div style={{ textAlign: "center", padding: "40px" }}>No PDF data available</div>
         )}
 
         {/* Field Overlays */}
@@ -180,6 +184,7 @@ export default function PdfViewer({ pdfData, onFieldsExtracted, selectedFields, 
           return (
             <div
               key={`${field.name}_${index}_${field.page}`}
+              data-field-name={field.name}
               onClick={() => onFieldClick(field)}
               style={{
                 position: "absolute",
