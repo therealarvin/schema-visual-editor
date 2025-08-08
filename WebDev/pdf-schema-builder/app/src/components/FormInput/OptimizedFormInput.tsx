@@ -26,15 +26,16 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 
-import { FormResponse, SchemaItem, SignatureInput } from "../types/realtor";
+import { FormResponse, SchemaItem, SignatureInput } from "@/types/realtor";
 import { useFieldStore, useField } from "./stores/fieldStore";
 import FieldRenderer from "./fields/FieldRenderer";
 import AddPartyModal from "./AddPartyModal";
-import {
-  getDealPartiesByDealOptionId,
-  getDealPartiesByDealId,
-  getPartiesByDealId,
-} from "@/app/actions/realtor/dealClient-actions";
+// Comment out actions that don't exist in this project
+// import {
+//   getDealPartiesByDealOptionId,
+//   getDealPartiesByDealId,
+//   getPartiesByDealId,
+// } from "@/app/actions/realtor/dealClient-actions";
  
 
 // Types for party selection

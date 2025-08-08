@@ -2,7 +2,7 @@ import React, { useCallback, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import clsx from "clsx";
-import { SchemaItem } from "../../types/realtor";
+import { SchemaItem } from "@/types/realtor";
 import { toast } from "sonner";
 
 interface TextFieldProps {

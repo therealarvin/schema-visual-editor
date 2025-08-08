@@ -1,7 +1,7 @@
 import React, { useCallback, useState, useEffect, useRef } from "react";
 import { Check, Loader2, AlertCircle } from "lucide-react";
 import clsx from "clsx";
-import { SchemaItem } from "../../types/realtor";
+import { SchemaItem } from "@/types/realtor";
 import FieldRenderer from "./FieldRenderer";
 import { useFieldStore } from "../stores/fieldStore";
 

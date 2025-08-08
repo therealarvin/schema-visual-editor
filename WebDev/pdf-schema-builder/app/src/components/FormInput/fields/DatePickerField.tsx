@@ -9,7 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { SchemaItem } from "../../types/realtor";
+import { SchemaItem } from "@/types/realtor";
 
 interface DatePickerFieldProps {
   schema: SchemaItem;

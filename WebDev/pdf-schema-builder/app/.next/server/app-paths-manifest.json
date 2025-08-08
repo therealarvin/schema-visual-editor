@@ -2,6 +2,7 @@
   "/[projectId]/page": "app/[projectId]/page.js",
   "/api/ai-logs/route": "app/api/ai-logs/route.js",
   "/api/generate-field-attributes/route": "app/api/generate-field-attributes/route.js",
+  "/api/organize-schema/route": "app/api/organize-schema/route.js",
   "/favicon.ico/route": "app/favicon.ico/route.js",
   "/page": "app/page.js"
 }

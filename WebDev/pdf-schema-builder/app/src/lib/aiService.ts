@@ -1,4 +1,4 @@
-import { PDFField } from '@/types/schema';
+import { PDFField, SchemaItem } from '@/types/schema';
 
 export interface FieldAttributesInput {
   intent: string;
@@ -33,6 +33,12 @@ export interface GeneratedFieldAttributes {
       layout?: 'vertical' | 'horizontal' | 'grid';
       columns?: number;
     };
+  };
+  checkbox_options?: {
+    options: {
+      display_name: string;
+      value: string;
+    }[];
   };
 }
 
@@ -262,5 +268,56 @@ export async function captureScreenshot(elementId: string, fieldSelectors?: stri
   } catch (error) {
     console.error('Error capturing screenshot:', error);
     return '';
+  }
+}
+
+export interface SchemaOrganizationInput {
+  schema: SchemaItem[];
+  formType?: string;
+}
+
+export interface OrganizedSchemaResponse {
+  schema: SchemaItem[];
+  blocks: {
+    name: string;
+    title: string;
+    description: string;
+    color_theme: string;
+    item_count: number;
+  }[];
+  error?: string;
+}
+
+export async function organizeSchema({
+  schema,
+  formType
+}: SchemaOrganizationInput): Promise<OrganizedSchemaResponse> {
+  try {
+    const response = await fetch('/api/organize-schema', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        schema,
+        formType
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error('Error organizing schema:', error);
+    
+    // Return original schema on error
+    return {
+      schema,
+      blocks: [],
+      error: error instanceof Error ? error.message : 'Failed to organize schema'
+    };
   }
 }

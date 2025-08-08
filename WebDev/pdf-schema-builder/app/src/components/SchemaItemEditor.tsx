@@ -523,6 +523,33 @@ export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinkin
               
               <div style={{ marginBottom: "8px" }}>
                 <label style={{ display: "block", fontWeight: "bold", marginBottom: "4px" }}>
+                  Block Icon:
+                </label>
+                <input
+                  type="text"
+                  value={localItem.display_attributes.block_style?.icon || ""}
+                  onChange={(e) => setLocalItem({
+                    ...localItem,
+                    display_attributes: {
+                      ...localItem.display_attributes,
+                      block_style: {
+                        ...localItem.display_attributes.block_style,
+                        icon: e.target.value
+                      }
+                    }
+                  })}
+                  placeholder="Icon name or emoji"
+                  style={{ 
+                    width: "100%", 
+                    padding: "8px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "4px"
+                  }}
+                />
+              </div>
+              
+              <div style={{ marginBottom: "8px" }}>
+                <label style={{ display: "block", fontWeight: "bold", marginBottom: "4px" }}>
                   Color Theme:
                 </label>
                 <select
@@ -1681,6 +1708,95 @@ export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinkin
                   })}
                 /> Allow multiple files
               </label>
+            </div>
+          )}
+
+          {/* Info Field Properties */}
+          {localItem.display_attributes.input_type === "info" && (
+            <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #e5e7eb" }}>
+              <h4 style={{ marginBottom: "8px" }}>Info Field Settings</h4>
+              
+              <div style={{ marginBottom: "8px" }}>
+                <label style={{ display: "block", fontWeight: "bold", marginBottom: "4px" }}>
+                  Info Style:
+                </label>
+                <select
+                  value={localItem.display_attributes.special_input?.info?.style || "default"}
+                  onChange={(e) => setLocalItem({
+                    ...localItem,
+                    display_attributes: {
+                      ...localItem.display_attributes,
+                      special_input: {
+                        ...localItem.display_attributes.special_input,
+                        info: {
+                          ...localItem.display_attributes.special_input?.info,
+                          style: e.target.value as "default" | "subtle" | "minimal" | "inline" | "compact" | "warning" | "success" | "error" | "tip"
+                        }
+                      }
+                    }
+                  })}
+                  style={{ 
+                    width: "200px", 
+                    padding: "8px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "4px"
+                  }}
+                >
+                  <option value="default">Default</option>
+                  <option value="subtle">Subtle</option>
+                  <option value="minimal">Minimal</option>
+                  <option value="inline">Inline</option>
+                  <option value="compact">Compact</option>
+                  <option value="warning">Warning</option>
+                  <option value="success">Success</option>
+                  <option value="error">Error</option>
+                  <option value="tip">Tip</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: "8px" }}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={localItem.display_attributes.special_input?.info?.icon !== false}
+                    onChange={(e) => setLocalItem({
+                      ...localItem,
+                      display_attributes: {
+                        ...localItem.display_attributes,
+                        special_input: {
+                          ...localItem.display_attributes.special_input,
+                          info: {
+                            ...localItem.display_attributes.special_input?.info,
+                            icon: e.target.checked
+                          }
+                        }
+                      }
+                    })}
+                  /> Show Icon
+                </label>
+              </div>
+
+              <div style={{ marginBottom: "8px" }}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={localItem.display_attributes.special_input?.info?.minimizable || false}
+                    onChange={(e) => setLocalItem({
+                      ...localItem,
+                      display_attributes: {
+                        ...localItem.display_attributes,
+                        special_input: {
+                          ...localItem.display_attributes.special_input,
+                          info: {
+                            ...localItem.display_attributes.special_input?.info,
+                            minimizable: e.target.checked
+                          }
+                        }
+                      }
+                    })}
+                  /> Allow Minimize/Collapse
+                </label>
+              </div>
             </div>
           )}
 

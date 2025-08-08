@@ -26,29 +26,51 @@ export async function POST(request: NextRequest) {
     // Extract just the field names from pdfContext for the system prompt
     const fieldNames = pdfContext.map((f: { name: string }) => f.name).join(', ');
     
-    const systemPrompt = `You are an AI assistant that generates form field attributes based on user intent. You must ALWAYS return valid JSON with at least the display_name field.
+    const systemPrompt = `You are an AI assistant that specializes in translating complex legal and real estate terminology into simple, easy-to-understand questions for everyday users. You must ALWAYS return valid JSON with at least the display_name field.
 
-Rules:
-1. Transform the user's intent into a clear QUESTION or descriptive label that anyone can understand
-2. Display names should be phrased as questions when appropriate (e.g., "What is your phone number?" instead of just "phone")
-3. Use simple, everyday language - avoid technical or real estate jargon
-4. Make it conversational and friendly, as if asking a person to fill out a form
-5. For yes/no fields, phrase as a question (e.g., "Do you have pets?" instead of "pets")
-6. For information fields, be specific about what you're asking for
-7. Keep questions concise but complete (typically 3-8 words)
-8. Only add a description if additional clarification is needed beyond the question
-9. Width should be 1-12 (grid units), with most fields being 6 or 12
-10. Placeholders should be helpful examples, not instructions
-11. ALWAYS return valid JSON with at least {"display_name": "..."}
-12. The JSON must be parseable and contain display_name as a required field
+YOUR PRIMARY TASK: Take ANY input - whether it's simple words, complex legal jargon, or technical real estate terms - and transform it into a clear, friendly question that a person with no real estate or legal knowledge can understand.
 
-Examples of good transformations:
-- Intent: "phone" → Display: "What is your phone number?"
-- Intent: "emergency contact" → Display: "Who should we contact in an emergency?"
-- Intent: "move in date" → Display: "When would you like to move in?"
-- Intent: "smoking" → Display: "Do you smoke?"
-- Intent: "monthly income" → Display: "What is your monthly income?"
-- Intent: "previous address" → Display: "What was your previous address?"
+CRITICAL RULES FOR TRANSLATION:
+1. ALWAYS interpret the underlying meaning of legal/technical terms before creating the question
+2. Break down complex concepts into their simplest form
+3. Ask yourself: "What is this really asking for?" then phrase it simply
+4. Use everyday language that a teenager could understand
+5. Make questions specific and actionable
+6. Avoid ALL industry jargon in your output
+
+TRANSLATION GUIDELINES:
+- For location/area terms → Ask "Where" questions
+- For date/time terms → Ask "When" questions  
+- For person/entity terms → Ask "Who" questions
+- For amounts/quantities → Ask "How much/many" questions
+- For yes/no concepts → Ask "Do you" or "Will you" questions
+- For descriptive information → Ask "What is" or "Please describe" questions
+
+COMPLEX JARGON TRANSLATIONS:
+- "market area for buyer/tenant representation" → "In which areas would you like to search for properties?"
+- "earnest money deposit" → "How much money will you put down to show you're serious?"
+- "contingency period" → "How many days do you need to inspect the property?"
+- "fiduciary duty" → "Who is your agent representing?"
+- "escrow instructions" → "Where should the deposit money be held?"
+- "due diligence period" → "How long do you need to review everything?"
+- "encumbrances" → "Are there any restrictions on the property?"
+- "covenant, conditions, and restrictions (CC&Rs)" → "Are there any community rules to follow?"
+- "power of attorney" → "Who can sign documents on your behalf?"
+- "lease commencement date" → "When would you like to start renting?"
+- "security deposit amount" → "How much deposit is required?"
+- "right of first refusal" → "Do you want the first chance to buy if it's sold?"
+
+FORMATTING RULES:
+1. Questions should be 4-10 words when possible
+2. Start with question words (What, When, Where, Who, How, Do you, Will you, etc.)
+3. Use "you" and "your" to make it personal
+4. Be specific about what information is needed
+5. Only add a description if the question alone isn't clear enough
+6. Width should be 1-12 (grid units), with most fields being 6 or 12
+7. Placeholders should show realistic examples
+8. ALWAYS return valid JSON with at least {"display_name": "..."}
+
+Remember: Your user might be filling this form for the first time and has no idea what legal terms mean. Make it as simple as asking a friend for basic information.
 
 IMPORTANT - Only use these EXACT properties (no other properties allowed):
 - display_name: string (REQUIRED)
@@ -56,6 +78,7 @@ IMPORTANT - Only use these EXACT properties (no other properties allowed):
 - width: number 1-12 (optional)
 - placeholder: string (optional, for text fields only)
 - special_input: object (optional, see below)
+- checkbox_options: object (optional, ONLY for checkbox fields, see below)
 
 For special_input on TEXT fields, ONLY use these exact properties:
 - text.percentage: boolean
@@ -76,6 +99,18 @@ For special_input on RADIO fields:
 - radio.layout: "vertical" | "horizontal" | "grid"
 - radio.columns: number
 
+For CHECKBOX fields ONLY, you can also provide checkbox_options to give better display names:
+- checkbox_options.options: array of {display_name: string, value: string}
+  - display_name: User-friendly label for this checkbox option
+  - value: The original PDF field name (must match exactly)
+  
+When generating checkbox options:
+1. Transform technical field names into clear, simple questions or labels
+2. Remove underscores and make proper capitalization
+3. For yes/no type fields, use clear "Yes" or "No" labels
+4. For agreement fields, use action-oriented labels like "I agree to..."
+5. Keep labels concise but clear
+
 DO NOT add any other properties like "suggestions", "type", "format", etc.
 
 Field Type: ${fieldType}
@@ -84,19 +119,33 @@ PDF Field Names: ${fieldNames}`;
 
     const userPrompt = `User Intent: "${intent}"
 
-Transform this intent into a clear, friendly question or label that anyone can understand, especially someone unfamiliar with real estate or technical terms.
+TASK: Transform this intent (which may contain complex legal or real estate jargon) into a simple, clear question that anyone can understand.
 
-IMPORTANT: 
-- Turn the intent into a QUESTION when appropriate (most cases)
-- Use simple, conversational language
-- Make it sound like you're asking a friend to fill out a form
-- Be specific about what information you need
+PROCESS:
+1. First, identify if this contains technical/legal terms
+2. If yes, translate the jargon into plain English
+3. Then create a friendly question based on the plain English meaning
+4. Make sure a person with zero real estate knowledge would understand
+
+For example:
+- If the intent mentions "market area" or "representation area" → This means where someone wants to look for properties
+- If it mentions "earnest money" or "deposit" → This means money to show they're serious
+- If it mentions "contingency" → This means conditions that must be met
+- If it mentions "escrow" → This means a neutral third party holding money
+
+Your response should be a question that sounds like you're helping a friend fill out a form, NOT a legal document.
 
 Return ONLY a JSON object with these exact properties (no other properties):
-- display_name: string (required) - A clear question or label based on the intent
+- display_name: string (required) - A simple, clear question based on the translated intent
 - description: string (optional) - Only if the question needs additional clarification
 - width: number (optional) - Grid width from 1-12, default to 6 for most fields, 12 for large fields
 - placeholder: string (optional) - Example text for text fields only
+
+For checkbox fields, ALSO include:
+- checkbox_options: object with "options" array
+  Each option should have:
+  - display_name: User-friendly label (e.g., "Yes", "I agree", "Include parking")
+  - value: The exact PDF field name
 
 For text fields, if special formatting is needed, use special_input with ONLY these properties:
 - special_input.text.phone: true (for phone numbers)
@@ -244,7 +293,7 @@ Example valid response:
     }
 
     // Validate and clean the response - remove invalid properties
-    const validProperties = ['display_name', 'description', 'width', 'placeholder', 'special_input'];
+    const validProperties = ['display_name', 'description', 'width', 'placeholder', 'special_input', 'checkbox_options'];
     const cleaned: Record<string, unknown> = {};
     
     for (const key of validProperties) {

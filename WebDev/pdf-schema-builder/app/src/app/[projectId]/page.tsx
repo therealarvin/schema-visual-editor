@@ -11,6 +11,7 @@ import SchemaEditor from "@/components/SchemaEditor";
 import SchemaExport from "@/components/SchemaExport";
 import AILogsViewer from "@/components/AILogsViewer";
 import { saveSchemaToIndexedDB, loadSchemaFromIndexedDB } from "@/lib/schemaStorage";
+import FormInputAdapter from "@/components/FormInput/FormInputAdapter";
 
 const MAX_BYTES = 20_971_520; // 20 MB
 function humanSize(bytes: number): string {
@@ -43,7 +44,7 @@ export default function ProjectPage() {
   const [extractedFields, setExtractedFields] = useState<PDFField[]>([]);
   const [showGrouping, setShowGrouping] = useState(false);
   const [currentFieldGroup, setCurrentFieldGroup] = useState<FieldGroup | undefined>();
-  const [activeTab, setActiveTab] = useState<"editor" | "typescript">("editor");
+  const [activeTab, setActiveTab] = useState<"editor" | "typescript" | "visual">("editor");
   const [linkingMode, setLinkingMode] = useState<{ linkingPath: string; linkingType: 'checkbox' | 'date' | 'text' } | null>(null);
 
   // Load PDF and schema on mount
@@ -441,6 +442,19 @@ export default function ProjectPage() {
             >
               TypeScript Export
             </button>
+            <button
+              onClick={() => setActiveTab("visual")}
+              style={{
+                padding: "10px 20px",
+                background: activeTab === "visual" ? "white" : "transparent",
+                border: "none",
+                borderBottom: activeTab === "visual" ? "2px solid #2563eb" : "none",
+                cursor: "pointer",
+                fontWeight: activeTab === "visual" ? "bold" : "normal"
+              }}
+            >
+              Visual Editor
+            </button>
           </div>
 
           <div style={{ flex: 1, overflow: "auto" }}>
@@ -454,8 +468,10 @@ export default function ProjectPage() {
                   setLinkingMode({ linkingPath, linkingType })}
                 linkingMode={linkingMode}
               />
-            ) : (
+            ) : activeTab === "typescript" ? (
               <SchemaExport schema={schema} formType={formType} />
+            ) : (
+              <FormInputAdapter schema={schema} formType={formType} />
             )}
           </div>
         </div>
