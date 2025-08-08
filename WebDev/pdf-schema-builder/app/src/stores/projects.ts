@@ -23,7 +23,7 @@ function genId() {
 
 export const useProjectsStore = create<ProjectsState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       projects: [],
       addProject: (project) => {
         const id = project.id ?? genId();
@@ -50,9 +50,9 @@ export const useProjectsStore = create<ProjectsState>()(
       version: 1,
       partialize: (state) => ({ projects: state.projects }),
       // migrate just in case future shapes change
-      migrate: (persisted, version) => {
-        if (!persisted) return { projects: [] } as any;
-        return persisted as any;
+      migrate: (persisted) => {
+        if (!persisted) return { projects: [] };
+        return persisted;
       },
     }
   )

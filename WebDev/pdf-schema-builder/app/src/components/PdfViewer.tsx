@@ -22,9 +22,11 @@ interface PdfViewerProps {
   onFieldsExtracted: (fields: PDFField[]) => void;
   selectedFields: Set<string>;
   onFieldClick: (field: PDFField) => void;
+  groupedFields?: Set<string>;
+  linkingMode?: boolean;
 }
 
-export default function PdfViewer({ pdfData, onFieldsExtracted, selectedFields, onFieldClick }: PdfViewerProps) {
+export default function PdfViewer({ pdfData, onFieldsExtracted, selectedFields, onFieldClick, groupedFields = new Set(), linkingMode = false }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [scale, setScale] = useState<number>(1.0);
@@ -59,7 +61,7 @@ export default function PdfViewer({ pdfData, onFieldsExtracted, selectedFields, 
         const page = await pdf.getPage(pageNum);
         const annotations = await page.getAnnotations();
 
-        annotations.forEach((annotation: any) => {
+        annotations.forEach((annotation) => {
           if (annotation.fieldType) {
             let type: PDFField["type"] = "text";
             
@@ -81,7 +83,7 @@ export default function PdfViewer({ pdfData, onFieldsExtracted, selectedFields, 
               page: pageNum,
               rect: annotation.rect as [number, number, number, number],
               value: annotation.fieldValue,
-              options: annotation.options?.map((opt: any) => opt.displayValue || opt.exportValue)
+              options: annotation.options?.map((opt: { displayValue?: string; exportValue?: string }) => opt.displayValue || opt.exportValue)
             };
 
             allFields.push(field);
@@ -152,6 +154,28 @@ export default function PdfViewer({ pdfData, onFieldsExtracted, selectedFields, 
         {getFieldsForCurrentPage().map((field, index) => {
           const [x1, y1, x2, y2] = field.rect;
           const isSelected = selectedFields.has(field.name);
+          const isGrouped = groupedFields.has(field.name);
+          
+          // Determine colors based on state
+          let borderColor = "#9ca3af"; // Default gray
+          let bgColor = "rgba(156, 163, 175, 0.1)";
+          let hoverColor = "rgba(156, 163, 175, 0.2)";
+          
+          if (isSelected) {
+            borderColor = "#2563eb"; // Blue for selected
+            bgColor = "rgba(37, 99, 235, 0.1)";
+            hoverColor = "rgba(37, 99, 235, 0.2)";
+          } else if (isGrouped) {
+            if (linkingMode) {
+              borderColor = "#10b981"; // Green for grouped fields in linking mode
+              bgColor = "rgba(16, 185, 129, 0.1)";
+              hoverColor = "rgba(16, 185, 129, 0.3)";
+            } else {
+              borderColor = "#8b5cf6"; // Purple for grouped fields
+              bgColor = "rgba(139, 92, 246, 0.1)";
+              hoverColor = "rgba(139, 92, 246, 0.2)";
+            }
+          }
           
           return (
             <div
@@ -163,21 +187,17 @@ export default function PdfViewer({ pdfData, onFieldsExtracted, selectedFields, 
                 bottom: `${y1 * scale + 20}px`,
                 width: `${(x2 - x1) * scale}px`,
                 height: `${(y2 - y1) * scale}px`,
-                border: `2px solid ${isSelected ? "#2563eb" : "#9ca3af"}`,
-                backgroundColor: isSelected ? "rgba(37, 99, 235, 0.1)" : "rgba(156, 163, 175, 0.1)",
-                cursor: "pointer",
+                border: `2px solid ${borderColor}`,
+                backgroundColor: bgColor,
+                cursor: linkingMode && isGrouped ? "crosshair" : "pointer",
                 transition: "all 0.2s",
               }}
-              title={`${field.name} (${field.type})`}
+              title={`${field.name} (${field.type})${isGrouped ? ' - GROUPED' : ''}`}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = isSelected 
-                  ? "rgba(37, 99, 235, 0.2)" 
-                  : "rgba(156, 163, 175, 0.2)";
+                e.currentTarget.style.backgroundColor = hoverColor;
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = isSelected 
-                  ? "rgba(37, 99, 235, 0.1)" 
-                  : "rgba(156, 163, 175, 0.1)";
+                e.currentTarget.style.backgroundColor = bgColor;
               }}
             />
           );

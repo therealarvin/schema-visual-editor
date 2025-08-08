@@ -1,22 +1,25 @@
 "use client";
 
-import React, { useCallback, useMemo, useState, useEffect } from "react";
 import { useParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { persistPdf, tryLoadPdf } from "@/lib/pdfStorage";
-import { saveSchemaToIndexedDB, loadSchemaFromIndexedDB } from "@/lib/schemaStorage";
 import { useProjectsStore } from "@/stores/projects";
-import { Schema, PDFField, FieldGroup } from "@/types/schema";
 import PdfViewer from "@/components/PdfViewer";
+import { PDFField, Schema, FieldGroup } from "@/types/schema";
 import FieldGrouping from "@/components/FieldGrouping";
 import SchemaEditor from "@/components/SchemaEditor";
 import SchemaExport from "@/components/SchemaExport";
+import { saveSchemaToIndexedDB, loadSchemaFromIndexedDB } from "@/lib/schemaStorage";
 
-const MAX_BYTES = 20 * 1024 * 1024; // 20 MB
-
-function humanSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+const MAX_BYTES = 20_971_520; // 20 MB
+function humanSize(bytes: number): string {
+  const units = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  while (bytes >= 1024 && i < units.length - 1) {
+    bytes /= 1024;
+    i++;
+  }
+  return `${bytes.toFixed(2)} ${units[i]}`;
 }
 
 export default function ProjectPage() {
@@ -31,7 +34,7 @@ export default function ProjectPage() {
   const [pdfData, setPdfData] = useState<ArrayBuffer | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  const [fileName, setFileName] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null); // eslint-disable-line @typescript-eslint/no-unused-vars
   
   // Schema builder state
   const [schema, setSchema] = useState<Schema>([]);
@@ -40,6 +43,7 @@ export default function ProjectPage() {
   const [showGrouping, setShowGrouping] = useState(false);
   const [currentFieldGroup, setCurrentFieldGroup] = useState<FieldGroup | undefined>();
   const [activeTab, setActiveTab] = useState<"editor" | "typescript">("editor");
+  const [linkingMode, setLinkingMode] = useState<{ checkboxOptionPath: string } | null>(null);
 
   // Load PDF and schema on mount
   useEffect(() => {
@@ -87,13 +91,13 @@ export default function ProjectPage() {
       setPdfData(arrayBuffer);
       const where = await persistPdf(projectId, arrayBuffer);
       setStatus(`Saved to ${where}`);
-    } catch (e: any) {
+    } catch (e) {
       console.error(e);
-      setError(e?.message || "Failed to read/save file.");
+      setError((e as Error)?.message || "Failed to read/save file.");
     }
   }, [projectId]);
 
-  const onDrop = useCallback((e: React.DragEvent) => {
+  const onDrop = useCallback((e: React.DragEvent) => { // eslint-disable-line @typescript-eslint/no-unused-vars
     e.preventDefault();
     e.stopPropagation();
     const dt = e.dataTransfer;
@@ -102,7 +106,7 @@ export default function ProjectPage() {
     }
   }, [onFiles]);
 
-  const onDragOver = useCallback((e: React.DragEvent) => {
+  const onDragOver = useCallback((e: React.DragEvent) => { // eslint-disable-line @typescript-eslint/no-unused-vars
     e.preventDefault();
     e.stopPropagation();
   }, []);
@@ -112,6 +116,54 @@ export default function ProjectPage() {
   }, [onFiles]);
 
   const handleFieldClick = (field: PDFField) => {
+    // If in linking mode, handle linking instead of selection
+    if (linkingMode) {
+      // Find the schema item that contains this field
+      const linkedSchemaItem = schema.find(item => 
+        item.pdf_attributes?.some(attr => 
+          attr.formfield === field.name ||
+          (Array.isArray(attr.formfield) && attr.formfield.includes(field.name)) ||
+          attr.linked_form_fields_text?.includes(field.name)
+        )
+      );
+      
+      if (linkedSchemaItem) {
+        // Add the linked field to the checkbox option
+        const [schemaId, optionIndex] = linkingMode.checkboxOptionPath.split('.');
+        const updatedSchema = schema.map(item => {
+          if (item.unique_id === schemaId && item.display_attributes.checkbox_options) {
+            const options = [...item.display_attributes.checkbox_options.options];
+            if (options[parseInt(optionIndex)]) {
+              if (!options[parseInt(optionIndex)].linkedFields) {
+                options[parseInt(optionIndex)].linkedFields = [];
+              }
+              if (!options[parseInt(optionIndex)].linkedFields!.includes(linkedSchemaItem.unique_id)) {
+                options[parseInt(optionIndex)].linkedFields!.push(linkedSchemaItem.unique_id);
+              }
+            }
+            return {
+              ...item,
+              display_attributes: {
+                ...item.display_attributes,
+                checkbox_options: {
+                  ...item.display_attributes.checkbox_options,
+                  options
+                }
+              }
+            };
+          }
+          return item;
+        });
+        setSchema(updatedSchema);
+        setLinkingMode(null);
+        alert(`Linked to ${linkedSchemaItem.display_attributes.display_name || linkedSchemaItem.unique_id}`);
+      } else {
+        alert('This field is not part of any schema group yet. Please create a group first.');
+      }
+      return;
+    }
+    
+    // Normal selection mode
     const newSelected = new Set(selectedFields);
     if (newSelected.has(field.name)) {
       newSelected.delete(field.name);
@@ -122,11 +174,6 @@ export default function ProjectPage() {
   };
 
   const handleCreateGroup = () => {
-    const selected = extractedFields.filter(f => selectedFields.has(f.name));
-    if (selected.length === 0) {
-      alert("Please select at least one field");
-      return;
-    }
     setShowGrouping(true);
   };
 
@@ -136,18 +183,42 @@ export default function ProjectPage() {
     setSelectedFields(new Set());
   };
 
+  // Get all fields that are already grouped
+  const getGroupedFields = (): Set<string> => {
+    const grouped = new Set<string>();
+    schema.forEach(item => {
+      item.pdf_attributes?.forEach(attr => {
+        if (typeof attr.formfield === 'string') {
+          grouped.add(attr.formfield);
+        } else if (Array.isArray(attr.formfield)) {
+          attr.formfield.forEach(f => grouped.add(f));
+        }
+        attr.linked_form_fields_text?.forEach(f => grouped.add(f));
+        attr.linked_form_fields_checkbox?.forEach(f => grouped.add(f.pdfAttribute));
+        attr.linked_form_fields_radio?.forEach(f => grouped.add(f.radioField));
+      });
+    });
+    return grouped;
+  };
+
+  // No PDF uploaded yet
   if (!pdfData) {
     return (
-      <div style={{ padding: 24 }}>
-        <h1>Project: {projectId}</h1>
+      <div
+        style={{
+          height: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
         <div
-          onDrop={onDrop}
-          onDragOver={onDragOver}
           style={{
-            marginTop: 16,
-            border: "2px dashed #999",
-            borderRadius: 12,
-            padding: 32,
+            maxWidth: 500,
+            width: "100%",
+            padding: 24,
+            borderRadius: 8,
+            border: "2px dashed #d1d5db",
             textAlign: "center",
             background: "#fafafa",
             cursor: "pointer",
@@ -202,7 +273,7 @@ export default function ProjectPage() {
                 background: "#2563eb",
                 color: "white",
                 border: "none",
-                borderRadius: "4px",
+                borderRadius: "6px",
                 cursor: "pointer"
               }}
             >
@@ -211,38 +282,60 @@ export default function ProjectPage() {
           )}
           <button
             onClick={() => setSelectedFields(new Set())}
-            disabled={selectedFields.size === 0}
             style={{
               padding: "8px 16px",
               background: "white",
               border: "1px solid #d1d5db",
-              borderRadius: "4px",
-              cursor: "pointer",
-              opacity: selectedFields.size === 0 ? 0.5 : 1
+              borderRadius: "6px",
+              cursor: "pointer"
             }}
+            disabled={selectedFields.size === 0}
           >
             Clear Selection
           </button>
+          {linkingMode && (
+            <button
+              onClick={() => setLinkingMode(null)}
+              style={{
+                padding: "8px 16px",
+                background: "#ef4444",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer"
+              }}
+            >
+              Cancel Linking Mode
+            </button>
+          )}
         </div>
       </div>
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        {/* PDF Viewer - Left Side */}
-        <div style={{ 
-          width: "50%", 
-          borderRight: "1px solid #e5e7eb",
-          overflow: "auto"
-        }}>
+        {/* PDF Viewer */}
+        <div style={{ flex: 1, borderRight: "1px solid #e5e7eb" }}>
+          {linkingMode && (
+            <div style={{
+              padding: "10px",
+              background: "#fef3c7",
+              borderBottom: "1px solid #fbbf24",
+              fontSize: "14px"
+            }}>
+              🔗 Linking Mode Active: Click on a grouped field in the PDF to link it
+            </div>
+          )}
           <PdfViewer
             pdfData={pdfData}
             onFieldsExtracted={setExtractedFields}
             selectedFields={selectedFields}
             onFieldClick={handleFieldClick}
+            groupedFields={getGroupedFields()}
+            linkingMode={!!linkingMode}
           />
         </div>
 
-        {/* Schema Editor - Right Side */}
-        <div style={{ width: "50%", display: "flex", flexDirection: "column" }}>
+        {/* Schema Editor / TypeScript Export */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
           <div style={{ 
             display: "flex", 
             borderBottom: "1px solid #e5e7eb",
@@ -283,6 +376,8 @@ export default function ProjectPage() {
                 onSchemaChange={setSchema}
                 fieldGroup={currentFieldGroup}
                 formType={formType}
+                onStartLinking={(checkboxOptionPath: string) => setLinkingMode({ checkboxOptionPath })}
+                linkingMode={linkingMode}
               />
             ) : (
               <SchemaExport schema={schema} formType={formType} />
@@ -302,4 +397,3 @@ export default function ProjectPage() {
     </div>
   );
 }
-

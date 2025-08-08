@@ -7,13 +7,15 @@ interface SchemaItemEditorProps {
   item: SchemaItem;
   onSave: (item: SchemaItem) => void;
   onCancel: () => void;
+  onStartLinking?: (checkboxOptionPath: string) => void;
+  linkingMode?: { checkboxOptionPath: string } | null;
 }
 
-export default function SchemaItemEditor({ item, onSave, onCancel }: SchemaItemEditorProps) {
+export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinking, linkingMode }: SchemaItemEditorProps) {
   const [localItem, setLocalItem] = useState<SchemaItem>(JSON.parse(JSON.stringify(item)));
 
   // Helper to update nested checkbox options
-  const updateCheckboxOption = (index: number, field: string, value: any) => {
+  const updateCheckboxOption = (index: number, field: string, value: unknown) => {
     const newItem = { ...localItem };
     if (!newItem.display_attributes.checkbox_options) {
       newItem.display_attributes.checkbox_options = { options: [] };
@@ -25,7 +27,7 @@ export default function SchemaItemEditor({ item, onSave, onCancel }: SchemaItemE
         linkedFields: []
       };
     }
-    (newItem.display_attributes.checkbox_options.options[index] as any)[field] = value;
+    (newItem.display_attributes.checkbox_options.options[index] as Record<string, unknown>)[field] = value;
     setLocalItem(newItem);
   };
 
@@ -53,7 +55,7 @@ export default function SchemaItemEditor({ item, onSave, onCancel }: SchemaItemE
   };
 
   // Helper to update PDF attributes
-  const updatePdfAttribute = (index: number, field: string, value: any) => {
+  const updatePdfAttribute = (index: number, field: string, value: unknown) => {
     const newItem = { ...localItem };
     if (!newItem.pdf_attributes) {
       newItem.pdf_attributes = [];
@@ -61,7 +63,7 @@ export default function SchemaItemEditor({ item, onSave, onCancel }: SchemaItemE
     if (!newItem.pdf_attributes[index]) {
       newItem.pdf_attributes[index] = { formType: "", formfield: "" };
     }
-    (newItem.pdf_attributes[index] as any)[field] = value;
+    (newItem.pdf_attributes[index] as Record<string, unknown>)[field] = value;
     setLocalItem(newItem);
   };
 
@@ -233,29 +235,75 @@ export default function SchemaItemEditor({ item, onSave, onCancel }: SchemaItemE
       {localItem.display_attributes.value.type === "resolved" && (
         <div style={{ marginBottom: "12px", paddingLeft: "20px" }}>
           <label style={{ display: "block", fontWeight: "bold", marginBottom: "4px" }}>
-            Database Field:
+            Database Configuration (Supabase):
           </label>
-          <input
-            type="text"
-            value={localItem.display_attributes.value.databaseField || ""}
+          <textarea
+            value={JSON.stringify(localItem.display_attributes.value.supabase || [], null, 2)}
+            onChange={(e) => {
+              try {
+                const parsed = JSON.parse(e.target.value);
+                setLocalItem({
+                  ...localItem,
+                  display_attributes: {
+                    ...localItem.display_attributes,
+                    value: {
+                      ...localItem.display_attributes.value,
+                      supabase: parsed
+                    }
+                  }
+                });
+              } catch {
+                // Invalid JSON, don't update
+              }
+            }}
+            placeholder='[{"table": "users", "column": "name", "eqBy": []}]'
+            style={{ 
+              width: "100%", 
+              minHeight: "80px",
+              padding: "8px",
+              border: "1px solid #d1d5db",
+              borderRadius: "4px",
+              fontFamily: "monospace",
+              fontSize: "12px"
+            }}
+          />
+        </div>
+      )}
+      
+      {/* Value details for reserved type */}
+      {localItem.display_attributes.value.type === "reserved" && (
+        <div style={{ marginBottom: "12px", paddingLeft: "20px" }}>
+          <label style={{ display: "block", fontWeight: "bold", marginBottom: "4px" }}>
+            Reserved Field:
+          </label>
+          <select
+            value={localItem.display_attributes.value.reserved || ""}
             onChange={(e) => setLocalItem({
               ...localItem,
               display_attributes: {
                 ...localItem.display_attributes,
                 value: {
                   ...localItem.display_attributes.value,
-                  databaseField: e.target.value
+                  reserved: e.target.value as "landlord_name_csv" | "tenant_name_csv" | "realtor_name_spaced" | "property_street_address" | "buyer/tenant_name_csv" | "buyer/tenant_phone_number" | "landlord_phone_number"
                 }
               }
             })}
-            placeholder="e.g., user.name"
             style={{ 
               width: "100%", 
               padding: "8px",
               border: "1px solid #d1d5db",
               borderRadius: "4px"
             }}
-          />
+          >
+            <option value="">Select a reserved field</option>
+            <option value="landlord_name_csv">Landlord Name CSV</option>
+            <option value="tenant_name_csv">Tenant Name CSV</option>
+            <option value="realtor_name_spaced">Realtor Name Spaced</option>
+            <option value="property_street_address">Property Street Address</option>
+            <option value="buyer/tenant_name_csv">Buyer/Tenant Name CSV</option>
+            <option value="buyer/tenant_phone_number">Buyer/Tenant Phone Number</option>
+            <option value="landlord_phone_number">Landlord Phone Number</option>
+          </select>
         </div>
       )}
 
@@ -313,6 +361,82 @@ export default function SchemaItemEditor({ item, onSave, onCancel }: SchemaItemE
                   >
                     Remove
                   </button>
+                </div>
+                
+                {/* Linked Fields Management */}
+                <div style={{ marginTop: "8px" }}>
+                  <label style={{ fontSize: "14px", fontWeight: "bold" }}>Linked Fields:</label>
+                  {option.linkedFields && option.linkedFields.length > 0 ? (
+                    <div style={{ marginTop: "4px" }}>
+                      {option.linkedFields.map((linkedId, linkIndex) => (
+                        <div key={linkIndex} style={{ 
+                          display: "inline-block", 
+                          marginRight: "8px",
+                          marginTop: "4px",
+                          padding: "2px 8px",
+                          background: "#e5e7eb",
+                          borderRadius: "4px",
+                          fontSize: "12px"
+                        }}>
+                          {linkedId}
+                          <button
+                            onClick={() => {
+                              const newItem = { ...localItem };
+                              if (newItem.display_attributes.checkbox_options?.options[index]?.linkedFields) {
+                                newItem.display_attributes.checkbox_options.options[index].linkedFields = 
+                                  newItem.display_attributes.checkbox_options.options[index].linkedFields!.filter(
+                                    (id) => id !== linkedId
+                                  );
+                                setLocalItem(newItem);
+                              }
+                            }}
+                            style={{ 
+                              marginLeft: "4px",
+                              background: "transparent",
+                              border: "none",
+                              color: "#ef4444",
+                              cursor: "pointer",
+                              fontWeight: "bold"
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: "12px", color: "#666", marginTop: "4px" }}>
+                      No linked fields
+                    </div>
+                  )}
+                  
+                  {onStartLinking && (
+                    <button
+                      onClick={() => {
+                        onSave(localItem); // Save current state first
+                        onStartLinking(`${localItem.unique_id}.${index}`);
+                      }}
+                      disabled={linkingMode?.checkboxOptionPath === `${localItem.unique_id}.${index}`}
+                      style={{ 
+                        marginTop: "8px",
+                        padding: "4px 8px",
+                        background: linkingMode?.checkboxOptionPath === `${localItem.unique_id}.${index}` 
+                          ? "#fbbf24" 
+                          : "#3b82f6",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: linkingMode?.checkboxOptionPath === `${localItem.unique_id}.${index}` 
+                          ? "not-allowed" 
+                          : "pointer",
+                        fontSize: "12px"
+                      }}
+                    >
+                      {linkingMode?.checkboxOptionPath === `${localItem.unique_id}.${index}` 
+                        ? "🔗 Linking Active - Click a field in PDF" 
+                        : "Add Linked Field"}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -563,20 +687,6 @@ export default function SchemaItemEditor({ item, onSave, onCancel }: SchemaItemE
               })}
             /> Cached
           </label>
-          <br />
-          <label>
-            <input
-              type="checkbox"
-              checked={localItem.display_attributes.isOnlyDisplayText || false}
-              onChange={(e) => setLocalItem({
-                ...localItem,
-                display_attributes: {
-                  ...localItem.display_attributes,
-                  isOnlyDisplayText: e.target.checked
-                }
-              })}
-            /> Only Display Text
-          </label>
         </div>
       </details>
 
@@ -592,7 +702,7 @@ export default function SchemaItemEditor({ item, onSave, onCancel }: SchemaItemE
               try {
                 const parsed = JSON.parse(e.target.value);
                 setLocalItem(parsed);
-              } catch (err) {
+              } catch {
                 // Invalid JSON, don't update
               }
             }}

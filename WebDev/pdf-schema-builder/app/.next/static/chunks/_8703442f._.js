@@ -17,7 +17,7 @@ function genId() {
     // Simple unique-ish id for local usage
     return Math.random().toString(36).slice(2, 10);
 }
-const useProjectsStore = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$zustand$2f$esm$2f$react$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__["create"])()((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$zustand$2f$esm$2f$middleware$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__["persist"])((set, get)=>({
+const useProjectsStore = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$zustand$2f$esm$2f$react$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__["create"])()((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$zustand$2f$esm$2f$middleware$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__["persist"])((set)=>({
         projects: [],
         addProject: (project)=>{
             var _project_id;
@@ -53,7 +53,7 @@ const useProjectsStore = (0, __TURBOPACK__imported__module__$5b$project$5d2f$nod
             projects: state.projects
         }),
     // migrate just in case future shapes change
-    migrate: (persisted, version)=>{
+    migrate: (persisted)=>{
         if (!persisted) return {
             projects: []
         };

@@ -522,6 +522,16 @@ function FieldEditor({ item, onUpdate, onDelete, onDuplicate, index, onMove, onM
                   </>
                 )}
               </div>
+              <div className="flex items-center gap-2 mt-1">
+                <label className="flex items-center gap-1.5 cursor-pointer hover:bg-gray-50 px-2 py-1 -mx-2 rounded transition-colors">
+                  <Checkbox
+                    checked={item.display_attributes.isRequired || false}
+                    onCheckedChange={checked => updateField('display_attributes.isRequired', checked || undefined)}
+                    className="h-4 w-4"
+                  />
+                  <span className="text-sm text-gray-600">Required</span>
+                </label>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">

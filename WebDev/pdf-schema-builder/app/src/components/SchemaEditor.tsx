@@ -9,9 +9,11 @@ interface SchemaEditorProps {
   onSchemaChange: (schema: Schema) => void;
   fieldGroup?: FieldGroup;
   formType: string;
+  onStartLinking?: (checkboxOptionPath: string) => void;
+  linkingMode?: { checkboxOptionPath: string } | null;
 }
 
-export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formType }: SchemaEditorProps) {
+export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formType, onStartLinking, linkingMode }: SchemaEditorProps) {
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [newItem, setNewItem] = useState<Partial<SchemaItem> | null>(null);
 
@@ -86,7 +88,7 @@ export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formT
       setNewItem(newSchemaItem);
       setEditingItem(newSchemaItem.unique_id);
     }
-  }, [fieldGroup]);
+  }, [fieldGroup]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSaveItem = (item: SchemaItem) => {
     if (newItem && item.unique_id === newItem.unique_id) {
@@ -115,6 +117,8 @@ export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formT
             item={newItem as SchemaItem}
             onSave={handleSaveItem}
             onCancel={() => setEditingItem(null)}
+            onStartLinking={onStartLinking}
+            linkingMode={linkingMode}
           />
         </div>
       )}
@@ -131,6 +135,8 @@ export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formT
               item={item}
               onSave={handleSaveItem}
               onCancel={() => setEditingItem(null)}
+              onStartLinking={onStartLinking}
+              linkingMode={linkingMode}
             />
           ) : (
             <>
