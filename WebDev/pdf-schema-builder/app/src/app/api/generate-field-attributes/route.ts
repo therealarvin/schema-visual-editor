@@ -92,12 +92,22 @@ For special_input on TEXT fields, ONLY use these exact properties:
 - text.url: boolean
 
 For special_input on CHECKBOX fields:
-- checkbox.asRadio: boolean
-- checkbox.horizontal: number
+- checkbox.asRadio: boolean - When true, makes checkboxes behave like radio buttons (single selection only)
+- checkbox.horizontal: number - Number of columns to arrange checkboxes in
+  * 1 = vertical stacking (default)
+  * 2 = two columns side by side
+  * 3 = three columns
+  * Example: If you have 2 yes/no checkboxes, set horizontal: 2 to show them side by side
+  * Example: If you have 6 options, horizontal: 2 creates a 3x2 grid
 
 For special_input on RADIO fields:
 - radio.layout: "vertical" | "horizontal" | "grid"
-- radio.columns: number
+- radio.columns: number - For grid layout, number of columns
+
+CHECKBOX LAYOUT GUIDELINES:
+- For yes/no questions or pairs of options, use horizontal: 2 to save vertical space
+- For long lists (>4 options), consider horizontal: 2 or 3 for better use of space
+- Use asRadio: true when the checkboxes should be mutually exclusive (only one can be selected)
 
 For CHECKBOX fields ONLY, you can also provide checkbox_options to give better display names:
 - checkbox_options.options: array of {display_name: string, value: string}

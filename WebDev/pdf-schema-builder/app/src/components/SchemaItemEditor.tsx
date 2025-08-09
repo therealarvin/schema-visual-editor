@@ -8,10 +8,11 @@ interface SchemaItemEditorProps {
   onSave: (item: SchemaItem) => void;
   onCancel: () => void;
   onStartLinking?: (linkingPath: string, linkingType: 'checkbox' | 'date' | 'text') => void;
+  onSaveAndStartLinking?: (item: SchemaItem, linkingPath: string, linkingType: 'checkbox' | 'date' | 'text') => void;
   linkingMode?: { linkingPath: string; linkingType: 'checkbox' | 'date' | 'text' } | null;
 }
 
-export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinking, linkingMode }: SchemaItemEditorProps) {
+export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinking, onSaveAndStartLinking, linkingMode }: SchemaItemEditorProps) {
   const [localItem, setLocalItem] = useState<SchemaItem>(JSON.parse(JSON.stringify(item)));
 
   // Helper to update nested checkbox options
@@ -778,11 +779,15 @@ export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinkin
                     </div>
                   )}
                   
-                  {onStartLinking && (
+                  {(onStartLinking || onSaveAndStartLinking) && (
                     <button
                       onClick={() => {
-                        onSave(localItem); // Save current state first
-                        onStartLinking(`${localItem.unique_id}.${index}`, 'checkbox');
+                        if (onSaveAndStartLinking) {
+                          onSaveAndStartLinking(localItem, `${localItem.unique_id}.${index}`, 'checkbox');
+                        } else if (onStartLinking) {
+                          onSave(localItem); // Fallback to old behavior
+                          onStartLinking(`${localItem.unique_id}.${index}`, 'checkbox');
+                        }
                       }}
                       disabled={linkingMode?.linkingPath === `${localItem.unique_id}.${index}` && linkingMode?.linkingType === 'checkbox'}
                       style={{ 
@@ -980,7 +985,7 @@ export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinkin
                   >
                     Add Continuation Field (Manual)
                   </button>
-                  {onStartLinking && (
+                  {(onStartLinking || onSaveAndStartLinking) && (
                     <button
                       onClick={() => {
                         // Initialize array with primary field if needed
@@ -990,8 +995,13 @@ export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinkin
                           const primaryField = typeof pdfAttr.formfield === 'string' ? pdfAttr.formfield : '';
                           newItem.pdf_attributes[pdfIndex].linked_form_fields_text = primaryField ? [primaryField] : [];
                         }
-                        onSave(newItem); // Save with initialized array
-                        onStartLinking(`${localItem.unique_id}.pdf.${pdfIndex}.text`, 'text');
+                        
+                        if (onSaveAndStartLinking) {
+                          onSaveAndStartLinking(newItem, `${localItem.unique_id}.pdf.${pdfIndex}.text`, 'text');
+                        } else if (onStartLinking) {
+                          onSave(newItem); // Fallback to old behavior
+                          onStartLinking(`${localItem.unique_id}.pdf.${pdfIndex}.text`, 'text');
+                        }
                       }}
                       disabled={linkingMode?.linkingPath === `${localItem.unique_id}.pdf.${pdfIndex}.text` && linkingMode?.linkingType === 'text'}
                       style={{ 
@@ -1106,11 +1116,15 @@ export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinkin
                   >
                     Add Linked Date (Manual)
                   </button>
-                  {onStartLinking && (
+                  {(onStartLinking || onSaveAndStartLinking) && (
                     <button
                       onClick={() => {
-                        onSave(localItem); // Save current state first
-                        onStartLinking(`${localItem.unique_id}.pdf.${pdfIndex}.date`, 'date');
+                        if (onSaveAndStartLinking) {
+                          onSaveAndStartLinking(localItem, `${localItem.unique_id}.pdf.${pdfIndex}.date`, 'date');
+                        } else if (onStartLinking) {
+                          onSave(localItem); // Fallback to old behavior
+                          onStartLinking(`${localItem.unique_id}.pdf.${pdfIndex}.date`, 'date');
+                        }
                       }}
                       disabled={linkingMode?.linkingPath === `${localItem.unique_id}.pdf.${pdfIndex}.date` && linkingMode?.linkingType === 'date'}
                       style={{ 

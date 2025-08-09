@@ -1,0 +1,1 @@
+- do not change the model name away from gpt-5-nano without explicit instructions

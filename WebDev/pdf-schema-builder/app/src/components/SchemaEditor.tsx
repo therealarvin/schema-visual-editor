@@ -3,7 +3,10 @@
 import React, { useState } from "react";
 import { SchemaItem, Schema, FieldGroup } from "@/types/schema";
 import SchemaItemEditor from "./SchemaItemEditor";
-import { generateFieldAttributes, organizeSchema } from "@/lib/aiService";
+import BeautificationModal from "./BeautificationModal";
+import IndividualCheckboxIntentDialog from "./IndividualCheckboxIntentDialog";
+import NotificationModal from "./NotificationModal";
+import { generateFieldAttributes, organizeSchema, beautifySchemaBlock, BeautificationIteration, generateSingleCheckboxLabel } from "@/lib/aiService";
 import {
   DndContext,
   closestCenter,
@@ -33,6 +36,8 @@ interface SchemaEditorProps {
   formType: string;
   onStartLinking?: (linkingPath: string, linkingType: 'checkbox' | 'date' | 'text') => void;
   linkingMode?: { linkingPath: string; linkingType: 'checkbox' | 'date' | 'text' } | null;
+  onHighlightField?: (fieldName: string | null) => void;
+  onNavigateToPage?: (page: number) => void;
 }
 
 // Sortable item component
@@ -44,6 +49,7 @@ function SortableSchemaItem({
   onSave,
   onCancel,
   onStartLinking,
+  onSaveAndStartLinking,
   linkingMode
 }: {
   item: SchemaItem;
@@ -53,6 +59,7 @@ function SortableSchemaItem({
   onSave: (item: SchemaItem) => void;
   onCancel: () => void;
   onStartLinking?: (linkingPath: string, linkingType: 'checkbox' | 'date' | 'text') => void;
+  onSaveAndStartLinking?: (item: SchemaItem, linkingPath: string, linkingType: 'checkbox' | 'date' | 'text') => void;
   linkingMode?: { linkingPath: string; linkingType: 'checkbox' | 'date' | 'text' } | null;
 }) {
   const {
@@ -87,7 +94,7 @@ function SortableSchemaItem({
           item={item}
           onSave={onSave}
           onCancel={onCancel}
-          onStartLinking={onStartLinking}
+          onSaveAndStartLinking={onSaveAndStartLinking}
           linkingMode={linkingMode}
         />
       ) : (
@@ -153,12 +160,33 @@ function SortableSchemaItem({
   );
 }
 
-export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formType, onStartLinking, linkingMode }: SchemaEditorProps) {
+export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formType, onStartLinking, linkingMode, onHighlightField, onNavigateToPage }: SchemaEditorProps) {
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [newItem, setNewItem] = useState<Partial<SchemaItem> | null>(null);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isOrganizing, setIsOrganizing] = useState(false);
+  const [beautifyingBlock, setBeautifyingBlock] = useState<string | null>(null);
+  const [beautificationIterations, setBeautificationIterations] = useState<BeautificationIteration[]>([]);
+  const [beautificationProgress, setBeautificationProgress] = useState<{
+    blockName: string;
+    iteration: number;
+    totalIterations: number;
+  } | null>(null);
+  const [showBeautificationModal, setShowBeautificationModal] = useState(false);
+  const [showCheckboxIntentDialog, setShowCheckboxIntentDialog] = useState(false);
+  const [pendingCheckboxGroup, setPendingCheckboxGroup] = useState<FieldGroup | null>(null);
+  
+  // Store the last editing item to preserve it across various actions
+  const [persistentEditingItem, setPersistentEditingItem] = useState<string | null>(null);
+  
+  // Notification state
+  const [notification, setNotification] = useState<{
+    isOpen: boolean;
+    message: string;
+    type: 'info' | 'success' | 'error' | 'warning';
+    title?: string;
+  }>({ isOpen: false, message: '', type: 'info' });
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -166,6 +194,135 @@ export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formT
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  // Generate schema item with custom labels for checkboxes
+  const generateSchemaItemWithLabels = async (
+    group: FieldGroup, 
+    labels: { fieldName: string; displayName: string; reasoning: string }[]
+  ): Promise<SchemaItem> => {
+    const firstField = group.fields[0];
+    const uniqueId = firstField.name;
+
+    const baseItem: SchemaItem = {
+      unique_id: uniqueId,
+      display_attributes: {
+        display_name: group.displayName || group.intent || "",
+        input_type: "checkbox",
+        order: schema.length + 1,
+        value: {
+          type: "manual"
+        },
+        checkbox_options: {
+          options: group.fields.map(field => {
+            // Find the AI-generated label for this field
+            const aiLabel = labels.find(l => l.fieldName === field.name);
+            return {
+              display_name: aiLabel?.displayName || field.name,
+              databaseStored: field.name,
+              linkedFields: []
+            };
+          })
+        }
+      },
+      pdf_attributes: [{
+        formType,
+        formfield: firstField.name,
+        linked_form_fields_checkbox: group.fields.map(field => ({
+          fromDatabase: field.name,
+          pdfAttribute: field.name
+        }))
+      }]
+    };
+
+    // If intent is provided, use AI to enhance other attributes
+    if (group.intent) {
+      try {
+        setIsGeneratingAI(true);
+        
+        const aiAttributes = await generateFieldAttributes({
+          intent: group.intent,
+          fieldType: 'checkbox',
+          screenshot: undefined,
+          pdfContext: group.fields,
+          groupType: 'checkbox'
+        });
+        
+        // Apply AI attributes but keep our custom checkbox labels
+        baseItem.display_attributes.display_name = aiAttributes.display_name;
+        if (aiAttributes.description) {
+          baseItem.display_attributes.description = aiAttributes.description;
+        }
+        if (aiAttributes.width) {
+          baseItem.display_attributes.width = aiAttributes.width;
+        }
+        if (aiAttributes.special_input) {
+          baseItem.display_attributes.special_input = aiAttributes.special_input;
+        }
+      } catch (error) {
+        console.error('AI generation failed:', error);
+      } finally {
+        setIsGeneratingAI(false);
+      }
+    }
+
+    return baseItem;
+  };
+
+  // Handle individual checkbox intents
+  const handleIndividualCheckboxIntents = async (intents: { fieldName: string; intent: string }[]) => {
+    setShowCheckboxIntentDialog(false);
+    
+    if (!pendingCheckboxGroup) return;
+    
+    const group = pendingCheckboxGroup;
+    setPendingCheckboxGroup(null);
+    
+    setIsGeneratingAI(true);
+    
+    try {
+      // Generate labels for each checkbox option individually
+      const labels: { fieldName: string; displayName: string; reasoning: string }[] = [];
+      
+      for (const checkboxIntent of intents) {
+        if (checkboxIntent.intent) {
+          // Generate label with AI for this specific checkbox
+          const labelResponse = await generateSingleCheckboxLabel({
+            fieldName: checkboxIntent.fieldName,
+            intent: checkboxIntent.intent,
+            formType
+          });
+          
+          labels.push({
+            fieldName: checkboxIntent.fieldName,
+            displayName: labelResponse.displayName,
+            reasoning: labelResponse.reasoning
+          });
+        } else {
+          // No intent provided, use original field name
+          labels.push({
+            fieldName: checkboxIntent.fieldName,
+            displayName: checkboxIntent.fieldName,
+            reasoning: 'No intent provided, using original field name'
+          });
+        }
+      }
+      
+      // Create schema item with AI-generated labels
+      const schemaItem = await generateSchemaItemWithLabels(group, labels);
+      setNewItem(schemaItem);
+      setEditingItem(schemaItem.unique_id);
+    } catch (error) {
+      console.error('Error generating checkbox labels:', error);
+      setNotification({
+        isOpen: true,
+        message: 'Failed to generate checkbox labels. Please try again.',
+        type: 'error',
+        title: 'Generation Failed'
+      });
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
 
   // Generate schema item from field group
   const generateSchemaItem = async (group: FieldGroup): Promise<SchemaItem> => {
@@ -302,16 +459,38 @@ export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formT
       
       // Only generate if not already in schema and not currently processing
       if (!alreadyInSchema && !alreadyProcessing) {
-        (async () => {
-          const newSchemaItem = await generateSchemaItem(fieldGroup);
-          setNewItem(newSchemaItem);
-          setEditingItem(newSchemaItem.unique_id);
-        })();
+        // For checkbox groups, show the intent dialog
+        if (fieldGroup.groupType === 'checkbox') {
+          setPendingCheckboxGroup(fieldGroup);
+          setShowCheckboxIntentDialog(true);
+        } else {
+          // For other types, generate normally
+          (async () => {
+            const newSchemaItem = await generateSchemaItem(fieldGroup);
+            setNewItem(newSchemaItem);
+            setEditingItem(newSchemaItem.unique_id);
+          })();
+        }
       }
     }
   }, [fieldGroup]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSaveItem = (item: SchemaItem) => {
+  // Sync persistent editing state with current editing state
+  React.useEffect(() => {
+    if (editingItem) {
+      setPersistentEditingItem(editingItem);
+    }
+  }, [editingItem]);
+  
+  // Restore editing state when coming back from linking mode
+  React.useEffect(() => {
+    if (!linkingMode && persistentEditingItem && !editingItem) {
+      // Restore the editing state after linking completes
+      setEditingItem(persistentEditingItem);
+    }
+  }, [linkingMode, persistentEditingItem, editingItem]);
+
+  const handleSaveItem = (item: SchemaItem, keepOpen: boolean = false) => {
     if (newItem && item.unique_id === newItem.unique_id) {
       // Adding new item
       onSchemaChange([...schema, item]);
@@ -320,7 +499,26 @@ export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formT
       // Updating existing item
       onSchemaChange(schema.map(s => s.unique_id === item.unique_id ? item : s));
     }
-    setEditingItem(null);
+    // Only close the editor if not explicitly told to keep it open
+    if (!keepOpen) {
+      setEditingItem(null);
+      setPersistentEditingItem(null); // Clear persistent state when intentionally closing
+    }
+  };
+  
+  // Special save function for linking that keeps the editor open
+  const handleSaveForLinking = (item: SchemaItem) => {
+    handleSaveItem(item, true); // Keep editor open
+  };
+  
+  // Custom linking handler that saves the item but keeps editor open
+  const handleStartLinkingWithSave = (item: SchemaItem, linkingPath: string, linkingType: 'checkbox' | 'date' | 'text') => {
+    // Save the item but keep the editor open
+    handleSaveForLinking(item);
+    // Start linking mode
+    if (onStartLinking) {
+      onStartLinking(linkingPath, linkingType);
+    }
   };
 
   const handleDeleteItem = (uniqueId: string) => {
@@ -378,7 +576,12 @@ export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formT
       
       if (result.error) {
         console.error('Failed to organize schema:', result.error);
-        alert(`Failed to organize schema: ${result.error}`);
+        setNotification({
+          isOpen: true,
+          message: `Failed to organize schema: ${result.error}`,
+          type: 'error',
+          title: 'Organization Failed'
+        });
       } else {
         onSchemaChange(result.schema);
         
@@ -387,21 +590,235 @@ export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formT
           const blockSummary = result.blocks
             .map(b => `${b.title}: ${b.item_count} items`)
             .join('\n');
-          alert(`Schema organized into ${result.blocks.length} blocks:\n\n${blockSummary}`);
+          setNotification({
+            isOpen: true,
+            message: `Schema organized into ${result.blocks.length} blocks:\n\n${blockSummary}`,
+            type: 'success',
+            title: 'Schema Organized'
+          });
         }
       }
     } catch (error) {
       console.error('Error organizing schema:', error);
-      alert('Failed to organize schema. Please try again.');
+      setNotification({
+        isOpen: true,
+        message: 'Failed to organize schema. Please try again.',
+        type: 'error',
+        title: 'Organization Error'
+      });
     } finally {
       setIsOrganizing(false);
+    }
+  };
+
+  const handleBeautifyBlock = async (blockName: string) => {
+    if (!blockName || beautifyingBlock) return;
+    
+    setBeautifyingBlock(blockName);
+    setBeautificationIterations([]);
+    setBeautificationProgress({
+      blockName,
+      iteration: 0,
+      totalIterations: 2  // Reduced for speed
+    });
+    setShowBeautificationModal(true);
+    
+    try {
+      // Use Server-Sent Events for real-time updates
+      const response = await fetch('/api/beautify-schema-stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          schema,
+          blockName,
+          formType,
+          iterationLimit: 2  // Reduced for speed
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status}`);
+      }
+      
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      
+      if (!reader) {
+        throw new Error('No response body');
+      }
+      
+      const iterations: BeautificationIteration[] = [];
+      let currentIteration: Partial<BeautificationIteration> = {};
+      let finalSchema: SchemaItem[] | null = null;
+      let buffer = '';
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        // Append new data to buffer
+        buffer += decoder.decode(value, { stream: true });
+        
+        // Process complete events in the buffer
+        const events = buffer.split('\n\n');
+        
+        // Keep the last incomplete event in the buffer
+        buffer = events.pop() || '';
+        
+        for (const eventBlock of events) {
+          if (!eventBlock.trim()) continue;
+          
+          const lines = eventBlock.split('\n');
+          let eventType = '';
+          let eventData: any = null;
+          
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              eventType = line.slice(7).trim();
+            } else if (line.startsWith('data: ')) {
+              try {
+                eventData = JSON.parse(line.slice(6));
+              } catch (e) {
+                console.error('Failed to parse event data:', line);
+              }
+            }
+          }
+          
+          if (eventType && eventData) {
+            console.log(`Processing event: ${eventType}`, eventData);
+            
+            switch (eventType) {
+                case 'start':
+                  console.log('Beautification started:', eventData);
+                  break;
+                  
+                case 'iteration-start':
+                  console.log('Starting iteration:', eventData.iteration);
+                  setBeautificationProgress(prev => prev ? {
+                    ...prev,
+                    iteration: eventData.iteration
+                  } : null);
+                  currentIteration = {
+                    iteration: eventData.iteration,
+                    changes: [],
+                    isComplete: false
+                  };
+                  break;
+                  
+                case 'screenshot':
+                  console.log('Screenshot received for iteration:', eventData.iteration);
+                  currentIteration.screenshot = eventData.screenshot;
+                  break;
+                  
+                case 'analysis':
+                  console.log('Analysis received for iteration:', eventData.iteration);
+                  currentIteration.reasoning = eventData.analysis;
+                  break;
+                  
+                case 'changes':
+                  console.log('Changes received for iteration:', eventData.iteration, 'Count:', eventData.changes?.length);
+                  currentIteration.changes = eventData.changes;
+                  break;
+                  
+                case 'iteration-complete':
+                  console.log('Iteration complete:', eventData.iteration, 'Is complete:', eventData.isComplete);
+                  if (currentIteration.iteration) {
+                    const completeIteration: BeautificationIteration = {
+                      iteration: currentIteration.iteration,
+                      screenshot: currentIteration.screenshot || '',
+                      changes: currentIteration.changes || [],
+                      reasoning: eventData.reasoning || currentIteration.reasoning || '',
+                      isComplete: eventData.isComplete
+                    };
+                    iterations.push(completeIteration);
+                    setBeautificationIterations([...iterations]);
+                    console.log('Total iterations so far:', iterations.length);
+                  }
+                  // Reset for next iteration
+                  currentIteration = {};
+                  break;
+                  
+                case 'complete':
+                  finalSchema = eventData.schema;
+                  console.log(`Beautification complete in ${eventData.duration}ms, total iterations: ${iterations.length}`);
+                  break;
+                  
+                case 'error':
+                  console.error('Beautification error:', eventData.message);
+                  setNotification({
+                    isOpen: true,
+                    message: eventData.message,
+                    type: 'error',
+                    title: 'Beautification Error'
+                  });
+                  break;
+              }
+            }
+          }
+        }
+      
+      // Apply final schema
+      if (finalSchema) {
+        onSchemaChange(finalSchema);
+      }
+      
+    } catch (error) {
+      console.error('Error beautifying block:', error);
+      setNotification({
+        isOpen: true,
+        message: 'Failed to beautify block. Please try again.',
+        type: 'error',
+        title: 'Beautification Failed'
+      });
+    } finally {
+      setBeautifyingBlock(null);
+      setBeautificationProgress(null);
     }
   };
 
   const activeItem = activeId ? schema.find(item => item.unique_id === activeId) : null;
 
   return (
-    <div style={{ height: "100%", overflow: "auto", padding: "20px" }}>
+    <>
+      <NotificationModal
+        isOpen={notification.isOpen}
+        message={notification.message}
+        type={notification.type}
+        title={notification.title}
+        onClose={() => setNotification({ ...notification, isOpen: false })}
+      />
+      
+      <BeautificationModal
+        isOpen={showBeautificationModal}
+        blockName={beautificationProgress?.blockName || ''}
+        currentIteration={beautificationProgress?.iteration || 0}
+        totalIterations={beautificationProgress?.totalIterations || 2}
+        iterations={beautificationIterations}
+        onClose={() => setShowBeautificationModal(false)}
+      />
+      
+      <IndividualCheckboxIntentDialog
+        isOpen={showCheckboxIntentDialog}
+        checkboxOptions={pendingCheckboxGroup?.fields.map(f => ({
+          fieldName: f.name,
+          currentLabel: f.name,
+          page: f.page
+        })) || []}
+        onComplete={handleIndividualCheckboxIntents}
+        onCancel={() => {
+          setShowCheckboxIntentDialog(false);
+          setPendingCheckboxGroup(null);
+          if (onHighlightField) {
+            onHighlightField(null); // Clear highlight on cancel
+          }
+        }}
+        onHighlightField={onHighlightField}
+        onNavigateToPage={onNavigateToPage}
+      />
+      
+      <div style={{ height: "100%", overflow: "auto", padding: "20px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
         <h2>Schema Editor</h2>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -491,8 +908,9 @@ export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formT
               onCancel={() => {
                 setEditingItem(null);
                 setNewItem(null);
+                setPersistentEditingItem(null);
               }}
-              onStartLinking={onStartLinking}
+              onSaveAndStartLinking={handleStartLinkingWithSave}
               linkingMode={linkingMode}
             />
           </div>
@@ -535,26 +953,77 @@ export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formT
                     }`,
                     borderRadius: "4px"
                   }}>
-                    <div style={{ 
-                      fontSize: "16px", 
-                      fontWeight: "600",
-                      color: blockStyle?.color_theme === 'blue' ? '#1e40af' :
-                             blockStyle?.color_theme === 'green' ? '#047857' :
-                             blockStyle?.color_theme === 'purple' ? '#6b21a8' :
-                             blockStyle?.color_theme === 'orange' ? '#c2410c' :
-                             '#374151'
-                    }}>
-                      {blockStyle?.title || item.display_attributes.block}
-                    </div>
-                    {blockStyle?.description && (
-                      <div style={{ 
-                        fontSize: "13px", 
-                        color: "#6b7280",
-                        marginTop: "4px"
-                      }}>
-                        {blockStyle.description}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ 
+                          fontSize: "16px", 
+                          fontWeight: "600",
+                          color: blockStyle?.color_theme === 'blue' ? '#1e40af' :
+                                 blockStyle?.color_theme === 'green' ? '#047857' :
+                                 blockStyle?.color_theme === 'purple' ? '#6b21a8' :
+                                 blockStyle?.color_theme === 'orange' ? '#c2410c' :
+                                 '#374151'
+                        }}>
+                          {blockStyle?.title || item.display_attributes.block}
+                        </div>
+                        {blockStyle?.description && (
+                          <div style={{ 
+                            fontSize: "13px", 
+                            color: "#6b7280",
+                            marginTop: "4px"
+                          }}>
+                            {blockStyle.description}
+                          </div>
+                        )}
                       </div>
-                    )}
+                      <button
+                        onClick={() => handleBeautifyBlock(item.display_attributes.block!)}
+                        disabled={beautifyingBlock === item.display_attributes.block}
+                        style={{
+                          padding: "4px 10px",
+                          fontSize: "12px",
+                          border: "1px solid",
+                          borderColor: beautifyingBlock === item.display_attributes.block ? "#d1d5db" :
+                                      blockStyle?.color_theme === 'blue' ? '#2563eb' :
+                                      blockStyle?.color_theme === 'green' ? '#10b981' :
+                                      blockStyle?.color_theme === 'purple' ? '#8b5cf6' :
+                                      blockStyle?.color_theme === 'orange' ? '#f97316' :
+                                      '#6b7280',
+                          borderRadius: "4px",
+                          background: beautifyingBlock === item.display_attributes.block ? "#f3f4f6" : "white",
+                          color: beautifyingBlock === item.display_attributes.block ? "#9ca3af" :
+                                blockStyle?.color_theme === 'blue' ? '#2563eb' :
+                                blockStyle?.color_theme === 'green' ? '#10b981' :
+                                blockStyle?.color_theme === 'purple' ? '#8b5cf6' :
+                                blockStyle?.color_theme === 'orange' ? '#f97316' :
+                                '#6b7280',
+                          cursor: beautifyingBlock === item.display_attributes.block ? "not-allowed" : "pointer",
+                          fontWeight: "500",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px"
+                        }}
+                      >
+                        {beautifyingBlock === item.display_attributes.block ? (
+                          <>
+                            <div style={{ 
+                              width: "10px", 
+                              height: "10px", 
+                              border: "2px solid #9ca3af", 
+                              borderTopColor: "transparent",
+                              borderRadius: "50%",
+                              animation: "spin 1s linear infinite"
+                            }} />
+                            Beautifying...
+                          </>
+                        ) : (
+                          <>
+                            <span style={{ fontSize: "14px" }}>✨</span>
+                            Beautify
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 )}
                 <SortableSchemaItem
@@ -563,8 +1032,11 @@ export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formT
                   onEdit={() => setEditingItem(item.unique_id)}
                   onDelete={() => handleDeleteItem(item.unique_id)}
                   onSave={handleSaveItem}
-                  onCancel={() => setEditingItem(null)}
-                  onStartLinking={onStartLinking}
+                  onCancel={() => {
+                    setEditingItem(null);
+                    setPersistentEditingItem(null);
+                  }}
+                  onSaveAndStartLinking={handleStartLinkingWithSave}
                   linkingMode={linkingMode}
                 />
               </React.Fragment>
@@ -603,5 +1075,6 @@ export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formT
         </div>
       )}
     </div>
+    </>
   );
 }

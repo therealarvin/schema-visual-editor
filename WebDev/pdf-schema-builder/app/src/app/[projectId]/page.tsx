@@ -12,6 +12,8 @@ import SchemaExport from "@/components/SchemaExport";
 import AILogsViewer from "@/components/AILogsViewer";
 import { saveSchemaToIndexedDB, loadSchemaFromIndexedDB } from "@/lib/schemaStorage";
 import FormInputAdapter from "@/components/FormInput/FormInputAdapter";
+import NotificationModal from "@/components/NotificationModal";
+import LinkConfirmPopover from "@/components/LinkConfirmPopover";
 
 const MAX_BYTES = 20_971_520; // 20 MB
 function humanSize(bytes: number): string {
@@ -46,6 +48,25 @@ export default function ProjectPage() {
   const [currentFieldGroup, setCurrentFieldGroup] = useState<FieldGroup | undefined>();
   const [activeTab, setActiveTab] = useState<"editor" | "typescript" | "visual">("editor");
   const [linkingMode, setLinkingMode] = useState<{ linkingPath: string; linkingType: 'checkbox' | 'date' | 'text' } | null>(null);
+  const [highlightedField, setHighlightedField] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  
+  // Modal state
+  const [notification, setNotification] = useState<{
+    isOpen: boolean;
+    message: string;
+    type: 'info' | 'success' | 'error' | 'warning';
+    title?: string;
+  }>({ isOpen: false, message: '', type: 'info' });
+  
+  // Link confirmation popover state
+  const [linkConfirm, setLinkConfirm] = useState<{
+    isOpen: boolean;
+    position: { x: number; y: number };
+    field: PDFField | null;
+    linkingPath: string;
+    linkingType: 'checkbox' | 'date' | 'text';
+  }>({ isOpen: false, position: { x: 0, y: 0 }, field: null, linkingPath: '', linkingType: 'checkbox' });
 
   // Load PDF and schema on mount
   useEffect(() => {
@@ -117,10 +138,14 @@ export default function ProjectPage() {
     if (e.target.files) void onFiles(e.target.files);
   }, [onFiles]);
 
-  const handleFieldClick = (field: PDFField) => {
+  const handleFieldClick = (field: PDFField, event?: React.MouseEvent) => {
     // If in linking mode, handle linking instead of selection
     if (linkingMode) {
       const { linkingPath, linkingType } = linkingMode;
+      
+      // Get click position for popover
+      const clickX = event?.clientX || window.innerWidth / 2;
+      const clickY = event?.clientY || window.innerHeight / 2;
       
       if (linkingType === 'checkbox') {
         // For checkbox linking, require a grouped field
@@ -133,36 +158,21 @@ export default function ProjectPage() {
         );
         
         if (linkedSchemaItem) {
-          const [schemaId, optionIndex] = linkingPath.split('.');
-          const updatedSchema = schema.map(item => {
-            if (item.unique_id === schemaId && item.display_attributes.checkbox_options) {
-              const options = [...item.display_attributes.checkbox_options.options];
-              if (options[parseInt(optionIndex)]) {
-                if (!options[parseInt(optionIndex)].linkedFields) {
-                  options[parseInt(optionIndex)].linkedFields = [];
-                }
-                if (!options[parseInt(optionIndex)].linkedFields!.includes(linkedSchemaItem.unique_id)) {
-                  options[parseInt(optionIndex)].linkedFields!.push(linkedSchemaItem.unique_id);
-                }
-              }
-              return {
-                ...item,
-                display_attributes: {
-                  ...item.display_attributes,
-                  checkbox_options: {
-                    ...item.display_attributes.checkbox_options,
-                    options
-                  }
-                }
-              };
-            }
-            return item;
+          // Show confirmation popover
+          setLinkConfirm({
+            isOpen: true,
+            position: { x: clickX, y: clickY },
+            field,
+            linkingPath,
+            linkingType
           });
-          setSchema(updatedSchema);
-          setLinkingMode(null);
-          alert(`Linked checkbox option to ${linkedSchemaItem.display_attributes.display_name || linkedSchemaItem.unique_id}`);
         } else {
-          alert('For checkbox linking, you must click on a grouped field. Please create a group first.');
+          setNotification({
+            isOpen: true,
+            message: 'For checkbox linking, you must click on a grouped field. Please create a group first.',
+            type: 'warning',
+            title: 'Invalid Selection'
+          });
         }
       } else if (linkingType === 'date') {
         // For date linking, require a grouped field
@@ -175,61 +185,31 @@ export default function ProjectPage() {
         );
         
         if (linkedSchemaItem) {
-          const pathParts = linkingPath.split('.');
-          const schemaId = pathParts[0];
-          const pdfIndex = parseInt(pathParts[2]);
-          
-          const updatedSchema = schema.map(item => {
-            if (item.unique_id === schemaId && item.pdf_attributes?.[pdfIndex]) {
-              const updatedPdfAttrs = [...(item.pdf_attributes || [])];
-              if (!updatedPdfAttrs[pdfIndex].linked_dates) {
-                updatedPdfAttrs[pdfIndex].linked_dates = [];
-              }
-              // Use the unique_id of the grouped field as the date field name
-              updatedPdfAttrs[pdfIndex].linked_dates!.push({
-                dateFieldName: linkedSchemaItem.unique_id
-              });
-              
-              return {
-                ...item,
-                pdf_attributes: updatedPdfAttrs
-              };
-            }
-            return item;
+          // Show confirmation popover
+          setLinkConfirm({
+            isOpen: true,
+            position: { x: clickX, y: clickY },
+            field,
+            linkingPath,
+            linkingType
           });
-          setSchema(updatedSchema);
-          setLinkingMode(null);
-          alert(`Added date field: ${linkedSchemaItem.display_attributes.display_name || linkedSchemaItem.unique_id}`);
         } else {
-          alert('For date linking, you must click on a grouped field. Please create a group first.');
+          setNotification({
+            isOpen: true,
+            message: 'For date linking, you must click on a grouped field. Please create a group first.',
+            type: 'warning',
+            title: 'Invalid Selection'
+          });
         }
       } else if (linkingType === 'text') {
-        // For text linking, allow any field (grouped or not)
-        const pathParts = linkingPath.split('.');
-        const schemaId = pathParts[0];
-        const pdfIndex = parseInt(pathParts[2]);
-        
-        const updatedSchema = schema.map(item => {
-          if (item.unique_id === schemaId && item.pdf_attributes?.[pdfIndex]) {
-            const updatedPdfAttrs = [...(item.pdf_attributes || [])];
-            if (!updatedPdfAttrs[pdfIndex].linked_form_fields_text) {
-              updatedPdfAttrs[pdfIndex].linked_form_fields_text = [];
-            }
-            // Add the field name directly
-            if (!updatedPdfAttrs[pdfIndex].linked_form_fields_text!.includes(field.name)) {
-              updatedPdfAttrs[pdfIndex].linked_form_fields_text!.push(field.name);
-            }
-            
-            return {
-              ...item,
-              pdf_attributes: updatedPdfAttrs
-            };
-          }
-          return item;
+        // For text linking, allow any field (grouped or not) - show confirmation
+        setLinkConfirm({
+          isOpen: true,
+          position: { x: clickX, y: clickY },
+          field,
+          linkingPath,
+          linkingType
         });
-        setSchema(updatedSchema);
-        setLinkingMode(null);
-        alert(`Added linked text field: ${field.name}`);
       }
       return;
     }
@@ -242,6 +222,131 @@ export default function ProjectPage() {
       newSelected.add(field.name);
     }
     setSelectedFields(newSelected);
+  };
+
+  const handleLinkConfirm = () => {
+    if (!linkConfirm.field) return;
+    
+    const { field, linkingPath, linkingType } = linkConfirm;
+    
+    if (linkingType === 'checkbox') {
+      const linkedSchemaItem = schema.find(item => 
+        item.pdf_attributes?.some(attr => 
+          attr.formfield === field.name ||
+          (Array.isArray(attr.formfield) && attr.formfield.includes(field.name)) ||
+          attr.linked_form_fields_text?.includes(field.name)
+        )
+      );
+      
+      if (linkedSchemaItem) {
+        const [schemaId, optionIndex] = linkingPath.split('.');
+        const updatedSchema = schema.map(item => {
+          if (item.unique_id === schemaId && item.display_attributes.checkbox_options) {
+            const options = [...item.display_attributes.checkbox_options.options];
+            if (options[parseInt(optionIndex)]) {
+              if (!options[parseInt(optionIndex)].linkedFields) {
+                options[parseInt(optionIndex)].linkedFields = [];
+              }
+              if (!options[parseInt(optionIndex)].linkedFields!.includes(linkedSchemaItem.unique_id)) {
+                options[parseInt(optionIndex)].linkedFields!.push(linkedSchemaItem.unique_id);
+              }
+            }
+            return {
+              ...item,
+              display_attributes: {
+                ...item.display_attributes,
+                checkbox_options: {
+                  ...item.display_attributes.checkbox_options,
+                  options
+                }
+              }
+            };
+          }
+          return item;
+        });
+        setSchema(updatedSchema);
+        setLinkingMode(null);
+        setNotification({
+          isOpen: true,
+          message: `Linked checkbox option to ${linkedSchemaItem.display_attributes.display_name || linkedSchemaItem.unique_id}`,
+          type: 'success',
+          title: 'Link Created'
+        });
+      }
+    } else if (linkingType === 'date') {
+      const linkedSchemaItem = schema.find(item => 
+        item.pdf_attributes?.some(attr => 
+          attr.formfield === field.name ||
+          (Array.isArray(attr.formfield) && attr.formfield.includes(field.name)) ||
+          attr.linked_form_fields_text?.includes(field.name)
+        )
+      );
+      
+      if (linkedSchemaItem) {
+        const pathParts = linkingPath.split('.');
+        const schemaId = pathParts[0];
+        const pdfIndex = parseInt(pathParts[2]);
+        
+        const updatedSchema = schema.map(item => {
+          if (item.unique_id === schemaId && item.pdf_attributes?.[pdfIndex]) {
+            const updatedPdfAttrs = [...(item.pdf_attributes || [])];
+            if (!updatedPdfAttrs[pdfIndex].linked_dates) {
+              updatedPdfAttrs[pdfIndex].linked_dates = [];
+            }
+            updatedPdfAttrs[pdfIndex].linked_dates!.push({
+              dateFieldName: linkedSchemaItem.unique_id
+            });
+            
+            return {
+              ...item,
+              pdf_attributes: updatedPdfAttrs
+            };
+          }
+          return item;
+        });
+        setSchema(updatedSchema);
+        setLinkingMode(null);
+        setNotification({
+          isOpen: true,
+          message: `Added date field: ${linkedSchemaItem.display_attributes.display_name || linkedSchemaItem.unique_id}`,
+          type: 'success',
+          title: 'Date Field Added'
+        });
+      }
+    } else if (linkingType === 'text') {
+      const pathParts = linkingPath.split('.');
+      const schemaId = pathParts[0];
+      const pdfIndex = parseInt(pathParts[2]);
+      
+      const updatedSchema = schema.map(item => {
+        if (item.unique_id === schemaId && item.pdf_attributes?.[pdfIndex]) {
+          const updatedPdfAttrs = [...(item.pdf_attributes || [])];
+          if (!updatedPdfAttrs[pdfIndex].linked_form_fields_text) {
+            updatedPdfAttrs[pdfIndex].linked_form_fields_text = [];
+          }
+          if (!updatedPdfAttrs[pdfIndex].linked_form_fields_text!.includes(field.name)) {
+            updatedPdfAttrs[pdfIndex].linked_form_fields_text!.push(field.name);
+          }
+          
+          return {
+            ...item,
+            pdf_attributes: updatedPdfAttrs
+          };
+        }
+        return item;
+      });
+      setSchema(updatedSchema);
+      setLinkingMode(null);
+      setNotification({
+        isOpen: true,
+        message: `Added linked text field: ${field.name}`,
+        type: 'success',
+        title: 'Text Field Linked'
+      });
+    }
+    
+    // Close confirmation popover
+    setLinkConfirm({ isOpen: false, position: { x: 0, y: 0 }, field: null, linkingPath: '', linkingType: 'checkbox' });
   };
 
   const handleCreateGroup = () => {
@@ -383,8 +488,12 @@ export default function ProjectPage() {
       </div>
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        {/* PDF Viewer */}
-        <div style={{ flex: 1, borderRight: "1px solid #e5e7eb" }}>
+        {/* PDF Viewer - Make it narrower when Visual Editor is active */}
+        <div style={{ 
+          flex: activeTab === "visual" ? "0 0 35%" : 1, 
+          minWidth: activeTab === "visual" ? "350px" : undefined,
+          borderRight: "1px solid #e5e7eb" 
+        }}>
           {linkingMode && (
             <div style={{
               padding: "10px",
@@ -406,11 +515,19 @@ export default function ProjectPage() {
             onFieldClick={handleFieldClick}
             groupedFields={getGroupedFields()}
             linkingMode={!!linkingMode}
+            highlightedField={highlightedField}
+            currentPage={currentPage}
+            onPageChange={setCurrentPage}
           />
         </div>
 
-        {/* Schema Editor / TypeScript Export */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        {/* Schema Editor / TypeScript Export / Visual Editor - Give Visual Editor more space */}
+        <div style={{ 
+          flex: activeTab === "visual" ? "1 1 65%" : 1, 
+          display: "flex", 
+          flexDirection: "column",
+          minWidth: 0  // Allow flexbox to shrink properly
+        }}>
           <div style={{ 
             display: "flex", 
             borderBottom: "1px solid #e5e7eb",
@@ -467,6 +584,8 @@ export default function ProjectPage() {
                 onStartLinking={(linkingPath: string, linkingType: 'checkbox' | 'date' | 'text') => 
                   setLinkingMode({ linkingPath, linkingType })}
                 linkingMode={linkingMode}
+                onHighlightField={setHighlightedField}
+                onNavigateToPage={setCurrentPage}
               />
             ) : activeTab === "typescript" ? (
               <SchemaExport schema={schema} formType={formType} />
@@ -488,6 +607,25 @@ export default function ProjectPage() {
       
       {/* AI Logs Viewer - only show in development */}
       {process.env.NODE_ENV === 'development' && <AILogsViewer />}
+      
+      {/* Notification Modal */}
+      <NotificationModal
+        isOpen={notification.isOpen}
+        message={notification.message}
+        type={notification.type}
+        title={notification.title}
+        onClose={() => setNotification({ ...notification, isOpen: false })}
+      />
+      
+      {/* Link Confirmation Popover */}
+      <LinkConfirmPopover
+        isOpen={linkConfirm.isOpen}
+        position={linkConfirm.position}
+        fieldName={linkConfirm.linkingType === 'checkbox' ? 'checkbox option' : linkConfirm.linkingType}
+        targetName={linkConfirm.field?.name || ''}
+        onConfirm={handleLinkConfirm}
+        onCancel={() => setLinkConfirm({ ...linkConfirm, isOpen: false })}
+      />
     </div>
   );
 }

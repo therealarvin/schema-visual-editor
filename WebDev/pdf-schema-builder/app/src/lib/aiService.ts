@@ -321,3 +321,173 @@ export async function organizeSchema({
     };
   }
 }
+
+export interface BeautificationInput {
+  schema: SchemaItem[];
+  blockName: string;
+  formType?: string;
+  iterationLimit?: number;
+}
+
+export interface BeautificationIteration {
+  iteration: number;
+  screenshot: string;
+  changes: {
+    unique_id: string;
+    field: string;
+    oldValue: any;
+    newValue: any;
+    reason: string;
+  }[];
+  reasoning: string;
+  isComplete: boolean;
+}
+
+export interface BeautificationResponse {
+  success: boolean;
+  schema?: SchemaItem[];
+  iterations?: BeautificationIteration[];
+  summary?: {
+    blockName: string;
+    totalIterations: number;
+    totalChanges: number;
+    completed: boolean;
+    duration: number;
+  };
+  error?: string;
+}
+
+export async function beautifySchemaBlock({
+  schema,
+  blockName,
+  formType,
+  iterationLimit = 3
+}: BeautificationInput): Promise<BeautificationResponse> {
+  try {
+    const response = await fetch('/api/beautify-schema', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        schema,
+        blockName,
+        formType,
+        iterationLimit
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error('Error beautifying schema:', error);
+    
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to beautify schema'
+    };
+  }
+}
+
+export interface CheckboxLabelsInput {
+  checkboxOptions: {
+    fieldName: string;
+    currentLabel?: string;
+  }[];
+  overallIntent: string;
+  formType?: string;
+}
+
+export interface CheckboxLabelsResponse {
+  labels: {
+    fieldName: string;
+    displayName: string;
+    reasoning: string;
+  }[];
+  error?: string;
+}
+
+export async function generateCheckboxLabels({
+  checkboxOptions,
+  overallIntent,
+  formType
+}: CheckboxLabelsInput): Promise<CheckboxLabelsResponse> {
+  try {
+    const response = await fetch('/api/generate-checkbox-labels', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        checkboxOptions,
+        overallIntent,
+        formType
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error('Error generating checkbox labels:', error);
+    
+    return {
+      labels: [],
+      error: error instanceof Error ? error.message : 'Failed to generate labels'
+    };
+  }
+}
+
+export interface SingleCheckboxLabelInput {
+  fieldName: string;
+  intent: string;
+  formType?: string;
+}
+
+export interface SingleCheckboxLabelResponse {
+  displayName: string;
+  reasoning: string;
+  error?: string;
+}
+
+export async function generateSingleCheckboxLabel({
+  fieldName,
+  intent,
+  formType
+}: SingleCheckboxLabelInput): Promise<SingleCheckboxLabelResponse> {
+  try {
+    const response = await fetch('/api/generate-single-checkbox-label', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fieldName,
+        intent,
+        formType
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error('Error generating single checkbox label:', error);
+    
+    return {
+      displayName: fieldName,
+      reasoning: 'Error occurred, using original field name',
+      error: error instanceof Error ? error.message : 'Failed to generate label'
+    };
+  }
+}

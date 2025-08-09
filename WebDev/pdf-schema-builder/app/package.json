@@ -46,6 +46,7 @@
     "next": "15.4.6",
     "openai": "^5.12.2",
     "pdfjs-dist": "^5.4.54",
+    "puppeteer": "^24.0.0",
     "react": "19.1.0",
     "react-day-picker": "^9.8.1",
     "react-dom": "19.1.0",

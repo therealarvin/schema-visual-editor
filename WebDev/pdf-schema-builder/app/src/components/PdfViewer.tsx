@@ -21,16 +21,32 @@ interface PdfViewerProps {
   pdfData: ArrayBuffer;
   onFieldsExtracted: (fields: PDFField[]) => void;
   selectedFields: Set<string>;
-  onFieldClick: (field: PDFField) => void;
+  onFieldClick: (field: PDFField, event?: React.MouseEvent) => void;
   groupedFields?: Set<string>;
   linkingMode?: boolean;
+  highlightedField?: string | null;
+  currentPage?: number;
+  onPageChange?: (page: number) => void;
 }
 
-export default function PdfViewer({ pdfData, onFieldsExtracted, selectedFields, onFieldClick, groupedFields = new Set(), linkingMode = false }: PdfViewerProps) {
+export default function PdfViewer({ 
+  pdfData, 
+  onFieldsExtracted, 
+  selectedFields, 
+  onFieldClick, 
+  groupedFields = new Set(), 
+  linkingMode = false,
+  highlightedField = null,
+  currentPage: externalCurrentPage,
+  onPageChange
+}: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
-  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [internalCurrentPage, setInternalCurrentPage] = useState<number>(1);
   const [scale, setScale] = useState<number>(1.0);
   const [pdfFields, setPdfFields] = useState<PDFField[]>([]);
+  
+  // Use external page if provided, otherwise use internal state
+  const currentPage = externalCurrentPage ?? internalCurrentPage;
 
   // Set up worker when component mounts
   useEffect(() => {
@@ -103,6 +119,13 @@ export default function PdfViewer({ pdfData, onFieldsExtracted, selectedFields, 
       extractFormFields();
     }
   }, [pdfData, extractFormFields]);
+  
+  // Sync external page changes
+  useEffect(() => {
+    if (externalCurrentPage && externalCurrentPage !== internalCurrentPage) {
+      setInternalCurrentPage(externalCurrentPage);
+    }
+  }, [externalCurrentPage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);
@@ -111,17 +134,24 @@ export default function PdfViewer({ pdfData, onFieldsExtracted, selectedFields, 
   const getFieldsForCurrentPage = () => {
     return pdfFields.filter(field => field.page === currentPage);
   };
+  
+  const handlePageChange = (newPage: number) => {
+    setInternalCurrentPage(newPage);
+    if (onPageChange) {
+      onPageChange(newPage);
+    }
+  };
 
   return (
     <div id="pdf-viewer-container" className="pdf-viewer-container" style={{ position: "relative", height: "100%", overflow: "auto" }}>
       <div style={{ padding: "10px", borderBottom: "1px solid #ccc", background: "#f5f5f5" }}>
-        <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage <= 1}>
+        <button onClick={() => handlePageChange(Math.max(1, currentPage - 1))} disabled={currentPage <= 1}>
           Previous
         </button>
         <span style={{ margin: "0 10px" }}>
           Page {currentPage} of {numPages}
         </span>
-        <button onClick={() => setCurrentPage(Math.min(numPages, currentPage + 1))} disabled={currentPage >= numPages}>
+        <button onClick={() => handlePageChange(Math.min(numPages, currentPage + 1))} disabled={currentPage >= numPages}>
           Next
         </button>
         <span style={{ marginLeft: "20px" }}>
@@ -159,13 +189,25 @@ export default function PdfViewer({ pdfData, onFieldsExtracted, selectedFields, 
           const [x1, y1, x2, y2] = field.rect;
           const isSelected = selectedFields.has(field.name);
           const isGrouped = groupedFields.has(field.name);
+          const isHighlighted = highlightedField === field.name;
           
           // Determine colors based on state
           let borderColor = "#9ca3af"; // Default gray
           let bgColor = "rgba(156, 163, 175, 0.1)";
           let hoverColor = "rgba(156, 163, 175, 0.2)";
+          let borderWidth = "2px";
+          let boxShadow = "none";
+          let zIndex = 1;
           
-          if (isSelected) {
+          if (isHighlighted) {
+            // Highlighted field (during checkbox intent collection) - highest priority
+            borderColor = "#10b981"; // Bright green
+            bgColor = "rgba(16, 185, 129, 0.3)";
+            hoverColor = "rgba(16, 185, 129, 0.4)";
+            borderWidth = "3px";
+            boxShadow = "0 0 20px rgba(16, 185, 129, 0.6)";
+            zIndex = 1000;
+          } else if (isSelected) {
             borderColor = "#2563eb"; // Blue for selected
             bgColor = "rgba(37, 99, 235, 0.1)";
             hoverColor = "rgba(37, 99, 235, 0.2)";
@@ -185,19 +227,21 @@ export default function PdfViewer({ pdfData, onFieldsExtracted, selectedFields, 
             <div
               key={`${field.name}_${index}_${field.page}`}
               data-field-name={field.name}
-              onClick={() => onFieldClick(field)}
+              onClick={(e) => onFieldClick(field, e)}
               style={{
                 position: "absolute",
                 left: `${x1 * scale + 20}px`,
                 bottom: `${y1 * scale + 20}px`,
                 width: `${(x2 - x1) * scale}px`,
                 height: `${(y2 - y1) * scale}px`,
-                border: `2px solid ${borderColor}`,
+                border: `${borderWidth} solid ${borderColor}`,
                 backgroundColor: bgColor,
+                boxShadow: boxShadow,
                 cursor: linkingMode && isGrouped ? "crosshair" : "pointer",
                 transition: "all 0.2s",
+                zIndex: zIndex,
               }}
-              title={`${field.name} (${field.type})${isGrouped ? ' - GROUPED' : ''}`}
+              title={`${field.name} (${field.type})${isGrouped ? ' - GROUPED' : ''}${isHighlighted ? ' - HIGHLIGHTED' : ''}`}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = hoverColor;
               }}
