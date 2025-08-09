@@ -27,6 +27,7 @@ interface PdfViewerProps {
   highlightedField?: string | null;
   currentPage?: number;
   onPageChange?: (page: number) => void;
+  editingItemFields?: Set<string>;
 }
 
 export default function PdfViewer({ 
@@ -38,7 +39,8 @@ export default function PdfViewer({
   linkingMode = false,
   highlightedField = null,
   currentPage: externalCurrentPage,
-  onPageChange
+  onPageChange,
+  editingItemFields = new Set()
 }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [internalCurrentPage, setInternalCurrentPage] = useState<number>(1);
@@ -190,6 +192,7 @@ export default function PdfViewer({
           const isSelected = selectedFields.has(field.name);
           const isGrouped = groupedFields.has(field.name);
           const isHighlighted = highlightedField === field.name;
+          const isEditingField = editingItemFields.has(field.name);
           
           // Determine colors based on state
           let borderColor = "#9ca3af"; // Default gray
@@ -207,6 +210,14 @@ export default function PdfViewer({
             borderWidth = "3px";
             boxShadow = "0 0 20px rgba(16, 185, 129, 0.6)";
             zIndex = 1000;
+          } else if (isEditingField) {
+            // Fields belonging to the currently editing schema item
+            borderColor = "#f59e0b"; // Amber/Orange for editing
+            bgColor = "rgba(245, 158, 11, 0.2)";
+            hoverColor = "rgba(245, 158, 11, 0.3)";
+            borderWidth = "3px";
+            boxShadow = "0 0 10px rgba(245, 158, 11, 0.4)";
+            zIndex = 100;
           } else if (isSelected) {
             borderColor = "#2563eb"; // Blue for selected
             bgColor = "rgba(37, 99, 235, 0.1)";
@@ -241,7 +252,7 @@ export default function PdfViewer({
                 transition: "all 0.2s",
                 zIndex: zIndex,
               }}
-              title={`${field.name} (${field.type})${isGrouped ? ' - GROUPED' : ''}${isHighlighted ? ' - HIGHLIGHTED' : ''}`}
+              title={`${field.name} (${field.type})${isGrouped ? ' - GROUPED' : ''}${isHighlighted ? ' - HIGHLIGHTED' : ''}${isEditingField ? ' - EDITING' : ''}`}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = hoverColor;
               }}

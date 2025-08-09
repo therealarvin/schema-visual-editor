@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { SchemaItem, Schema, FieldGroup } from "@/types/schema";
+import { SchemaItem, Schema, FieldGroup, PDFField } from "@/types/schema";
 import SchemaItemEditor from "./SchemaItemEditor";
 import BeautificationModal from "./BeautificationModal";
 import IndividualCheckboxIntentDialog from "./IndividualCheckboxIntentDialog";
@@ -38,6 +38,11 @@ interface SchemaEditorProps {
   linkingMode?: { linkingPath: string; linkingType: 'checkbox' | 'date' | 'text' } | null;
   onHighlightField?: (fieldName: string | null) => void;
   onNavigateToPage?: (page: number) => void;
+  onEditingItemChange?: (itemId: string | null) => void;
+  extractedFields?: PDFField[];
+  currentPage?: number;
+  visibilityFieldSelectionMode?: boolean;
+  onVisibilityFieldSelected?: (schemaItemId: string, conditionIndex: number) => void;
 }
 
 // Sortable item component
@@ -50,7 +55,10 @@ function SortableSchemaItem({
   onCancel,
   onStartLinking,
   onSaveAndStartLinking,
-  linkingMode
+  linkingMode,
+  onStartVisibilityFieldSelection,
+  visibilityFieldSelectionMode,
+  schema
 }: {
   item: SchemaItem;
   isEditing: boolean;
@@ -61,6 +69,9 @@ function SortableSchemaItem({
   onStartLinking?: (linkingPath: string, linkingType: 'checkbox' | 'date' | 'text') => void;
   onSaveAndStartLinking?: (item: SchemaItem, linkingPath: string, linkingType: 'checkbox' | 'date' | 'text') => void;
   linkingMode?: { linkingPath: string; linkingType: 'checkbox' | 'date' | 'text' } | null;
+  onStartVisibilityFieldSelection?: (conditionIndex: number) => void;
+  visibilityFieldSelectionMode?: number | null;
+  schema?: SchemaItem[];
 }) {
   const {
     attributes,
@@ -96,6 +107,9 @@ function SortableSchemaItem({
           onCancel={onCancel}
           onSaveAndStartLinking={onSaveAndStartLinking}
           linkingMode={linkingMode}
+          onStartVisibilityFieldSelection={onStartVisibilityFieldSelection}
+          visibilityFieldSelectionMode={visibilityFieldSelectionMode}
+          schema={schema}
         />
       ) : (
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -160,7 +174,21 @@ function SortableSchemaItem({
   );
 }
 
-export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formType, onStartLinking, linkingMode, onHighlightField, onNavigateToPage }: SchemaEditorProps) {
+export default function SchemaEditor({ 
+  schema, 
+  onSchemaChange, 
+  fieldGroup, 
+  formType, 
+  onStartLinking, 
+  linkingMode, 
+  onHighlightField, 
+  onNavigateToPage,
+  onEditingItemChange,
+  extractedFields = [],
+  currentPage,
+  visibilityFieldSelectionMode: parentVisibilityMode,
+  onVisibilityFieldSelected
+}: SchemaEditorProps) {
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [newItem, setNewItem] = useState<Partial<SchemaItem> | null>(null);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
@@ -179,6 +207,93 @@ export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formT
   
   // Store the last editing item to preserve it across various actions
   const [persistentEditingItem, setPersistentEditingItem] = useState<string | null>(null);
+  
+  // Visibility field selection mode
+  const [visibilityFieldSelectionMode, setVisibilityFieldSelectionMode] = useState<number | null>(null);
+  const [visibilityEditingItemId, setVisibilityEditingItemId] = useState<string | null>(null);
+  
+  // Helper to get all field names associated with a schema item
+  const getSchemaItemFieldNames = (item: SchemaItem): string[] => {
+    const fieldNames: string[] = [];
+    
+    item.pdf_attributes?.forEach(attr => {
+      // Add main form field
+      if (typeof attr.formfield === 'string') {
+        fieldNames.push(attr.formfield);
+      } else if (Array.isArray(attr.formfield)) {
+        fieldNames.push(...attr.formfield);
+      }
+      
+      // Add linked text fields
+      if (attr.linked_form_fields_text) {
+        fieldNames.push(...attr.linked_form_fields_text);
+      }
+      
+      // Add linked checkbox fields
+      if (attr.linked_form_fields_checkbox) {
+        attr.linked_form_fields_checkbox.forEach(cb => {
+          fieldNames.push(cb.pdfAttribute);
+        });
+      }
+      
+      // Add linked radio fields
+      if (attr.linked_form_fields_radio) {
+        attr.linked_form_fields_radio.forEach(r => {
+          fieldNames.push(r.radioField);
+        });
+      }
+    });
+    
+    return fieldNames;
+  };
+  
+  // Handle visibility field selection
+  const handleStartVisibilityFieldSelection = (conditionIndex: number) => {
+    setVisibilityFieldSelectionMode(conditionIndex);
+    setVisibilityEditingItemId(editingItem);
+    if (onVisibilityFieldSelected && editingItem) {
+      onVisibilityFieldSelected(editingItem, conditionIndex);
+    }
+  };
+  
+  // Handle edit item click
+  const handleEditItem = (itemId: string) => {
+    setEditingItem(itemId);
+    setPersistentEditingItem(itemId);
+    
+    // Notify parent about editing item change
+    if (onEditingItemChange) {
+      onEditingItemChange(itemId);
+    }
+    
+    // Find the schema item
+    const item = schema.find(s => s.unique_id === itemId);
+    if (!item) return;
+    
+    // Get all field names for this schema item
+    const fieldNames = getSchemaItemFieldNames(item);
+    
+    // Find all pages that contain these fields
+    const pages = new Set<number>();
+    extractedFields.forEach(field => {
+      if (fieldNames.includes(field.name)) {
+        pages.add(field.page);
+      }
+    });
+    
+    if (pages.size > 0 && onNavigateToPage) {
+      const pagesArray = Array.from(pages).sort((a, b) => a - b);
+      
+      // If current page has fields from this item, stay on it
+      if (currentPage && pages.has(currentPage)) {
+        // Already on a page with this item's fields
+        return;
+      }
+      
+      // Otherwise navigate to the first page with this item's fields
+      onNavigateToPage(pagesArray[0]);
+    }
+  };
   
   // Notification state
   const [notification, setNotification] = useState<{
@@ -818,7 +933,7 @@ export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formT
         onNavigateToPage={onNavigateToPage}
       />
       
-      <div style={{ height: "100%", overflow: "auto", padding: "20px" }}>
+      <div style={{ padding: "20px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
         <h2>Schema Editor</h2>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -1029,15 +1144,23 @@ export default function SchemaEditor({ schema, onSchemaChange, fieldGroup, formT
                 <SortableSchemaItem
                   item={item}
                   isEditing={editingItem === item.unique_id}
-                  onEdit={() => setEditingItem(item.unique_id)}
+                  onEdit={() => handleEditItem(item.unique_id)}
                   onDelete={() => handleDeleteItem(item.unique_id)}
                   onSave={handleSaveItem}
                   onCancel={() => {
                     setEditingItem(null);
                     setPersistentEditingItem(null);
+                    setVisibilityFieldSelectionMode(null);
+                    setVisibilityEditingItemId(null);
+                    if (onEditingItemChange) {
+                      onEditingItemChange(null);
+                    }
                   }}
                   onSaveAndStartLinking={handleStartLinkingWithSave}
                   linkingMode={linkingMode}
+                  onStartVisibilityFieldSelection={handleStartVisibilityFieldSelection}
+                  visibilityFieldSelectionMode={visibilityFieldSelectionMode}
+                  schema={schema}
                 />
               </React.Fragment>
             );

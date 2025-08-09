@@ -10,9 +10,22 @@ interface SchemaItemEditorProps {
   onStartLinking?: (linkingPath: string, linkingType: 'checkbox' | 'date' | 'text') => void;
   onSaveAndStartLinking?: (item: SchemaItem, linkingPath: string, linkingType: 'checkbox' | 'date' | 'text') => void;
   linkingMode?: { linkingPath: string; linkingType: 'checkbox' | 'date' | 'text' } | null;
+  onStartVisibilityFieldSelection?: (conditionIndex: number) => void;
+  visibilityFieldSelectionMode?: number | null; // Index of the condition being set
+  schema?: SchemaItem[]; // For getting field info
 }
 
-export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinking, onSaveAndStartLinking, linkingMode }: SchemaItemEditorProps) {
+export default function SchemaItemEditor({ 
+  item, 
+  onSave, 
+  onCancel, 
+  onStartLinking, 
+  onSaveAndStartLinking, 
+  linkingMode,
+  onStartVisibilityFieldSelection,
+  visibilityFieldSelectionMode,
+  schema = []
+}: SchemaItemEditorProps) {
   const [localItem, setLocalItem] = useState<SchemaItem>(JSON.parse(JSON.stringify(item)));
 
   // Helper to update nested checkbox options
@@ -103,9 +116,7 @@ export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinkin
       borderRadius: "8px", 
       padding: "16px",
       marginBottom: "16px",
-      background: "#f9fafb",
-      maxHeight: "70vh",
-      overflowY: "auto"
+      background: "#f9fafb"
     }}>
       {/* Basic Fields */}
       <h4 style={{ marginBottom: "12px", fontWeight: "bold" }}>Basic Properties</h4>
@@ -1182,33 +1193,222 @@ export default function SchemaItemEditor({ item, onSave, onCancel, onStartLinkin
           <div style={{ fontSize: "12px", color: "#666", marginBottom: "8px" }}>
             Show this field only when conditions are met
           </div>
-          <textarea
-            value={JSON.stringify(localItem.display_attributes.visibleIf || [], null, 2)}
-            onChange={(e) => {
-              try {
-                const parsed = JSON.parse(e.target.value);
-                setLocalItem({
-                  ...localItem,
-                  display_attributes: {
-                    ...localItem.display_attributes,
-                    visibleIf: parsed
-                  }
-                });
-              } catch {
-                // Invalid JSON, don't update
+          
+          {/* Display existing conditions */}
+          {localItem.display_attributes.visibleIf?.map((condition, index) => {
+            const targetField = schema.find(s => s.unique_id === condition.unique_id);
+            const isCheckboxField = targetField?.display_attributes.input_type === 'checkbox';
+            
+            return (
+              <div key={index} style={{ 
+                marginBottom: "12px", 
+                padding: "12px", 
+                border: "1px solid #d1d5db", 
+                borderRadius: "6px",
+                background: "#f9fafb"
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                  <strong>Field:</strong>
+                  {visibilityFieldSelectionMode === index ? (
+                    <span style={{ color: "#f59e0b" }}>
+                      🎯 Click on a field in the PDF to select...
+                    </span>
+                  ) : (
+                    <span>{targetField?.display_attributes.display_name || condition.unique_id}</span>
+                  )}
+                  {!visibilityFieldSelectionMode && (
+                    <button
+                      onClick={() => {
+                        if (onSaveAndStartLinking) {
+                          onSaveAndStartLinking(localItem, `visibility.${index}`, 'text');
+                        }
+                        if (onStartVisibilityFieldSelection) {
+                          onStartVisibilityFieldSelection(index);
+                        }
+                      }}
+                      style={{
+                        padding: "2px 8px",
+                        fontSize: "12px",
+                        background: "#3b82f6",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: "pointer"
+                      }}
+                    >
+                      Change Field
+                    </button>
+                  )}
+                </div>
+                
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                  <strong>Operation:</strong>
+                  <select
+                    value={condition.operation}
+                    onChange={(e) => {
+                      const newConditions = [...(localItem.display_attributes.visibleIf || [])];
+                      newConditions[index] = {
+                        ...newConditions[index],
+                        operation: e.target.value as any
+                      };
+                      setLocalItem({
+                        ...localItem,
+                        display_attributes: {
+                          ...localItem.display_attributes,
+                          visibleIf: newConditions
+                        }
+                      });
+                    }}
+                    style={{
+                      padding: "4px 8px",
+                      border: "1px solid #d1d5db",
+                      borderRadius: "4px"
+                    }}
+                  >
+                    <option value="==">Equals (==)</option>
+                    <option value="!==">Not Equals (!==)</option>
+                    <option value=">">Greater Than (&gt;)</option>
+                    <option value=">=">Greater Than or Equal (&gt;=)</option>
+                    <option value="<">Less Than (&lt;)</option>
+                    <option value="<=">Less Than or Equal (&lt;=)</option>
+                    {isCheckboxField && (
+                      <>
+                        <option value="contains">Contains</option>
+                        <option value="doesNotContain">Does Not Contain</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+                
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                  <strong>Value:</strong>
+                  {(condition.operation === 'contains' || condition.operation === 'doesNotContain') && isCheckboxField ? (
+                    <select
+                      value={condition.valueChecked}
+                      onChange={(e) => {
+                        const newConditions = [...(localItem.display_attributes.visibleIf || [])];
+                        newConditions[index] = {
+                          ...newConditions[index],
+                          valueChecked: e.target.value
+                        };
+                        setLocalItem({
+                          ...localItem,
+                          display_attributes: {
+                            ...localItem.display_attributes,
+                            visibleIf: newConditions
+                          }
+                        });
+                      }}
+                      style={{
+                        padding: "4px 8px",
+                        border: "1px solid #d1d5db",
+                        borderRadius: "4px",
+                        flex: 1
+                      }}
+                    >
+                      <option value="">Select a checkbox option...</option>
+                      {targetField?.display_attributes.checkbox_options?.options.map(opt => (
+                        <option key={opt.databaseStored} value={opt.databaseStored}>
+                          {opt.display_name} ({opt.databaseStored})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={['>', '>=', '<', '<='].includes(condition.operation) ? "number" : "text"}
+                      value={condition.valueChecked}
+                      onChange={(e) => {
+                        const newConditions = [...(localItem.display_attributes.visibleIf || [])];
+                        newConditions[index] = {
+                          ...newConditions[index],
+                          valueChecked: e.target.value
+                        };
+                        setLocalItem({
+                          ...localItem,
+                          display_attributes: {
+                            ...localItem.display_attributes,
+                            visibleIf: newConditions
+                          }
+                        });
+                      }}
+                      placeholder={['>', '>=', '<', '<='].includes(condition.operation) ? "Enter a number..." : "Enter a value..."}
+                      style={{
+                        padding: "4px 8px",
+                        border: "1px solid #d1d5db",
+                        borderRadius: "4px",
+                        flex: 1
+                      }}
+                    />
+                  )}
+                </div>
+                
+                <button
+                  onClick={() => {
+                    const newConditions = [...(localItem.display_attributes.visibleIf || [])];
+                    newConditions.splice(index, 1);
+                    setLocalItem({
+                      ...localItem,
+                      display_attributes: {
+                        ...localItem.display_attributes,
+                        visibleIf: newConditions.length > 0 ? newConditions : undefined
+                      }
+                    });
+                  }}
+                  style={{
+                    padding: "4px 12px",
+                    background: "#ef4444",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    fontSize: "12px"
+                  }}
+                >
+                  Remove Condition
+                </button>
+              </div>
+            );
+          })}
+          
+          {/* Add new condition button */}
+          <button
+            onClick={() => {
+              const newConditions = [...(localItem.display_attributes.visibleIf || [])];
+              const newIndex = newConditions.length;
+              newConditions.push({
+                unique_id: "",
+                operation: "==",
+                valueChecked: ""
+              });
+              setLocalItem({
+                ...localItem,
+                display_attributes: {
+                  ...localItem.display_attributes,
+                  visibleIf: newConditions
+                }
+              });
+              
+              // Start field selection for the new condition
+              if (onSaveAndStartLinking) {
+                onSaveAndStartLinking(localItem, `visibility.${newIndex}`, 'text');
+              }
+              if (onStartVisibilityFieldSelection) {
+                onStartVisibilityFieldSelection(newIndex);
               }
             }}
-            placeholder='[{"unique_id": "field_id", "operation": "==", "valueChecked": "value"}]'
-            style={{ 
-              width: "100%", 
-              minHeight: "80px",
-              padding: "8px",
-              border: "1px solid #d1d5db",
-              borderRadius: "4px",
-              fontFamily: "monospace",
-              fontSize: "12px"
+            style={{
+              padding: "8px 16px",
+              background: "#10b981",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontSize: "14px",
+              fontWeight: "500"
             }}
-          />
+          >
+            + Add Visibility Condition
+          </button>
         </div>
       </details>
 

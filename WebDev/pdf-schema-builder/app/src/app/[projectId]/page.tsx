@@ -50,6 +50,8 @@ export default function ProjectPage() {
   const [linkingMode, setLinkingMode] = useState<{ linkingPath: string; linkingType: 'checkbox' | 'date' | 'text' } | null>(null);
   const [highlightedField, setHighlightedField] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [editingSchemaItemId, setEditingSchemaItemId] = useState<string | null>(null);
+  const [visibilitySelectionMode, setVisibilitySelectionMode] = useState<{ schemaItemId: string; conditionIndex: number } | null>(null);
   
   // Modal state
   const [notification, setNotification] = useState<{
@@ -66,6 +68,8 @@ export default function ProjectPage() {
     field: PDFField | null;
     linkingPath: string;
     linkingType: 'checkbox' | 'date' | 'text';
+    linkedSchemaItem?: SchemaItem; // The schema item that contains the clicked field
+    checkboxOptionName?: string; // The name of the checkbox option being linked from
   }>({ isOpen: false, position: { x: 0, y: 0 }, field: null, linkingPath: '', linkingType: 'checkbox' });
 
   // Load PDF and schema on mount
@@ -139,6 +143,87 @@ export default function ProjectPage() {
   }, [onFiles]);
 
   const handleFieldClick = (field: PDFField, event?: React.MouseEvent) => {
+    // If in visibility selection mode, handle visibility field selection
+    if (visibilitySelectionMode) {
+      // Find the schema item that contains this field
+      let targetSchemaItem: SchemaItem | undefined;
+      
+      // Check all schema items for this field
+      schema.forEach(item => {
+        item.pdf_attributes?.forEach(attr => {
+          if (typeof attr.formfield === 'string' && attr.formfield === field.name) {
+            targetSchemaItem = item;
+          } else if (Array.isArray(attr.formfield) && attr.formfield.includes(field.name)) {
+            targetSchemaItem = item;
+          }
+          
+          if (attr.linked_form_fields_text?.includes(field.name)) {
+            targetSchemaItem = item;
+          }
+          
+          if (attr.linked_form_fields_checkbox?.some(cb => cb.pdfAttribute === field.name)) {
+            targetSchemaItem = item;
+          }
+          
+          if (attr.linked_form_fields_radio?.some(r => r.radioField === field.name)) {
+            targetSchemaItem = item;
+          }
+        });
+      });
+      
+      if (targetSchemaItem) {
+        // Update the visibility condition for the editing schema item
+        const editingItem = schema.find(s => s.unique_id === visibilitySelectionMode.schemaItemId);
+        if (editingItem) {
+          const updatedSchema = schema.map(item => {
+            if (item.unique_id === visibilitySelectionMode.schemaItemId) {
+              const visibleIf = [...(item.display_attributes.visibleIf || [])];
+              if (visibleIf[visibilitySelectionMode.conditionIndex]) {
+                visibleIf[visibilitySelectionMode.conditionIndex].unique_id = targetSchemaItem.unique_id;
+                
+                // Auto-populate valueChecked for checkbox contains/doesNotContain
+                const isCheckboxField = targetSchemaItem.display_attributes.input_type === 'checkbox';
+                const operation = visibleIf[visibilitySelectionMode.conditionIndex].operation;
+                if (isCheckboxField && (operation === 'contains' || operation === 'doesNotContain')) {
+                  // Set to first checkbox option if available
+                  if (targetSchemaItem.display_attributes.checkbox_options?.options.length) {
+                    visibleIf[visibilitySelectionMode.conditionIndex].valueChecked = 
+                      targetSchemaItem.display_attributes.checkbox_options.options[0].databaseStored;
+                  }
+                }
+              }
+              
+              return {
+                ...item,
+                display_attributes: {
+                  ...item.display_attributes,
+                  visibleIf
+                }
+              };
+            }
+            return item;
+          });
+          
+          setSchema(updatedSchema);
+          setVisibilitySelectionMode(null);
+          setNotification({
+            isOpen: true,
+            message: `Selected field: ${targetSchemaItem.display_attributes.display_name || targetSchemaItem.unique_id}`,
+            type: 'success',
+            title: 'Visibility Field Set'
+          });
+        }
+      } else {
+        setNotification({
+          isOpen: true,
+          message: 'Please select a grouped field that belongs to a schema item.',
+          type: 'warning',
+          title: 'Invalid Selection'
+        });
+      }
+      return;
+    }
+    
     // If in linking mode, handle linking instead of selection
     if (linkingMode) {
       const { linkingPath, linkingType } = linkingMode;
@@ -148,24 +233,55 @@ export default function ProjectPage() {
       const clickY = event?.clientY || window.innerHeight / 2;
       
       if (linkingType === 'checkbox') {
-        // For checkbox linking, require a grouped field
-        const linkedSchemaItem = schema.find(item => 
-          item.pdf_attributes?.some(attr => 
-            attr.formfield === field.name ||
-            (Array.isArray(attr.formfield) && attr.formfield.includes(field.name)) ||
-            attr.linked_form_fields_text?.includes(field.name)
-          )
-        );
+        // For checkbox linking, find the schema item that contains the clicked field
+        let linkedSchemaItem: SchemaItem | undefined;
+        
+        // Check if it's a checkbox field in linked_form_fields_checkbox
+        schema.forEach(item => {
+          item.pdf_attributes?.forEach(attr => {
+            const checkboxField = attr.linked_form_fields_checkbox?.find(
+              cb => cb.pdfAttribute === field.name
+            );
+            if (checkboxField) {
+              linkedSchemaItem = item;
+            }
+          });
+        });
+        
+        // If not found in checkbox fields, check other field types
+        if (!linkedSchemaItem) {
+          linkedSchemaItem = schema.find(item => 
+            item.pdf_attributes?.some(attr => 
+              attr.formfield === field.name ||
+              (Array.isArray(attr.formfield) && attr.formfield.includes(field.name)) ||
+              attr.linked_form_fields_text?.includes(field.name) ||
+              attr.linked_form_fields_radio?.some(r => r.radioField === field.name)
+            )
+          );
+        }
         
         if (linkedSchemaItem) {
+          // Get the checkbox option name from the linking path
+          const [schemaId, optionIndex] = linkingPath.split('.');
+          const sourceSchema = schema.find(item => item.unique_id === schemaId);
+          let checkboxOptionName = '';
+          if (sourceSchema?.display_attributes.checkbox_options) {
+            const option = sourceSchema.display_attributes.checkbox_options.options[parseInt(optionIndex)];
+            if (option) {
+              checkboxOptionName = option.display_name || `Option ${parseInt(optionIndex) + 1}`;
+            }
+          }
+          
           // Show confirmation popover
           setLinkConfirm({
             isOpen: true,
             position: { x: clickX, y: clickY },
             field,
             linkingPath,
-            linkingType
-          });
+            linkingType,
+            linkedSchemaItem, // Store the schema item that contains the clicked field
+            checkboxOptionName // Store the checkbox option name
+          } as any);
         } else {
           setNotification({
             isOpen: true,
@@ -227,17 +343,9 @@ export default function ProjectPage() {
   const handleLinkConfirm = () => {
     if (!linkConfirm.field) return;
     
-    const { field, linkingPath, linkingType } = linkConfirm;
+    const { field, linkingPath, linkingType, linkedSchemaItem, checkboxOptionName } = linkConfirm;
     
     if (linkingType === 'checkbox') {
-      const linkedSchemaItem = schema.find(item => 
-        item.pdf_attributes?.some(attr => 
-          attr.formfield === field.name ||
-          (Array.isArray(attr.formfield) && attr.formfield.includes(field.name)) ||
-          attr.linked_form_fields_text?.includes(field.name)
-        )
-      );
-      
       if (linkedSchemaItem) {
         const [schemaId, optionIndex] = linkingPath.split('.');
         const updatedSchema = schema.map(item => {
@@ -247,8 +355,10 @@ export default function ProjectPage() {
               if (!options[parseInt(optionIndex)].linkedFields) {
                 options[parseInt(optionIndex)].linkedFields = [];
               }
-              if (!options[parseInt(optionIndex)].linkedFields!.includes(linkedSchemaItem.unique_id)) {
-                options[parseInt(optionIndex)].linkedFields!.push(linkedSchemaItem.unique_id);
+              // Always use the schema item's unique_id for checkbox linking
+              const linkId = linkedSchemaItem.unique_id;
+              if (!options[parseInt(optionIndex)].linkedFields!.includes(linkId)) {
+                options[parseInt(optionIndex)].linkedFields!.push(linkId);
               }
             }
             return {
@@ -266,9 +376,14 @@ export default function ProjectPage() {
         });
         setSchema(updatedSchema);
         setLinkingMode(null);
+        
+        // Display both the checkbox option and the linked schema item in the success message
+        const linkName = linkedSchemaItem.display_attributes.display_name || 
+          linkedSchemaItem.unique_id;
+        const sourceOptionName = checkboxOptionName || 'checkbox option';
         setNotification({
           isOpen: true,
-          message: `Linked checkbox option to ${linkedSchemaItem.display_attributes.display_name || linkedSchemaItem.unique_id}`,
+          message: `Linked "${sourceOptionName}" to "${linkName}"`,
           type: 'success',
           title: 'Link Created'
         });
@@ -346,7 +461,7 @@ export default function ProjectPage() {
     }
     
     // Close confirmation popover
-    setLinkConfirm({ isOpen: false, position: { x: 0, y: 0 }, field: null, linkingPath: '', linkingType: 'checkbox' });
+    setLinkConfirm({ isOpen: false, position: { x: 0, y: 0 }, field: null, linkingPath: '', linkingType: 'checkbox', linkedSchemaItem: undefined });
   };
 
   const handleCreateGroup = () => {
@@ -375,6 +490,28 @@ export default function ProjectPage() {
       });
     });
     return grouped;
+  };
+  
+  // Get fields for the currently editing schema item
+  const getEditingItemFields = (): Set<string> => {
+    const fields = new Set<string>();
+    if (!editingSchemaItemId) return fields;
+    
+    const item = schema.find(s => s.unique_id === editingSchemaItemId);
+    if (!item) return fields;
+    
+    item.pdf_attributes?.forEach(attr => {
+      if (typeof attr.formfield === 'string') {
+        fields.add(attr.formfield);
+      } else if (Array.isArray(attr.formfield)) {
+        attr.formfield.forEach(f => fields.add(f));
+      }
+      attr.linked_form_fields_text?.forEach(f => fields.add(f));
+      attr.linked_form_fields_checkbox?.forEach(f => fields.add(f.pdfAttribute));
+      attr.linked_form_fields_radio?.forEach(f => fields.add(f.radioField));
+    });
+    
+    return fields;
   };
 
   // No PDF uploaded yet
@@ -484,6 +621,21 @@ export default function ProjectPage() {
               Cancel Linking Mode
             </button>
           )}
+          {visibilitySelectionMode && (
+            <button
+              onClick={() => setVisibilitySelectionMode(null)}
+              style={{
+                padding: "8px 16px",
+                background: "#ef4444",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer"
+              }}
+            >
+              Cancel Visibility Selection
+            </button>
+          )}
         </div>
       </div>
 
@@ -508,6 +660,16 @@ export default function ProjectPage() {
               }
             </div>
           )}
+          {visibilitySelectionMode && (
+            <div style={{
+              padding: "10px",
+              background: "#ddd6fe",
+              borderBottom: "1px solid #a78bfa",
+              fontSize: "14px"
+            }}>
+              👁️ Visibility Field Selection: Click on a field in the PDF to set as the condition field
+            </div>
+          )}
           <PdfViewer
             pdfData={pdfData}
             onFieldsExtracted={setExtractedFields}
@@ -518,6 +680,7 @@ export default function ProjectPage() {
             highlightedField={highlightedField}
             currentPage={currentPage}
             onPageChange={setCurrentPage}
+            editingItemFields={getEditingItemFields()}
           />
         </div>
 
@@ -586,6 +749,13 @@ export default function ProjectPage() {
                 linkingMode={linkingMode}
                 onHighlightField={setHighlightedField}
                 onNavigateToPage={setCurrentPage}
+                onEditingItemChange={setEditingSchemaItemId}
+                extractedFields={extractedFields}
+                currentPage={currentPage}
+                visibilityFieldSelectionMode={!!visibilitySelectionMode}
+                onVisibilityFieldSelected={(schemaItemId, conditionIndex) => {
+                  setVisibilitySelectionMode({ schemaItemId, conditionIndex });
+                }}
               />
             ) : activeTab === "typescript" ? (
               <SchemaExport schema={schema} formType={formType} />
@@ -621,10 +791,10 @@ export default function ProjectPage() {
       <LinkConfirmPopover
         isOpen={linkConfirm.isOpen}
         position={linkConfirm.position}
-        fieldName={linkConfirm.linkingType === 'checkbox' ? 'checkbox option' : linkConfirm.linkingType}
-        targetName={linkConfirm.field?.name || ''}
+        fieldName={linkConfirm.checkboxOptionName || (linkConfirm.linkingType === 'checkbox' ? 'checkbox option' : linkConfirm.linkingType)}
+        targetName={linkConfirm.linkedSchemaItem?.display_attributes.display_name || linkConfirm.linkedSchemaItem?.unique_id || linkConfirm.field?.name || ''}
         onConfirm={handleLinkConfirm}
-        onCancel={() => setLinkConfirm({ ...linkConfirm, isOpen: false })}
+        onCancel={() => setLinkConfirm({ ...linkConfirm, isOpen: false, linkedSchemaItem: undefined, checkboxOptionName: undefined })}
       />
     </div>
   );
